@@ -1,75 +1,97 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import ScoreCircle from '../../components/ScoreCircle';
+import WaveAnimation from '../../components/WaveAnimation';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+// Mock function to simulate fetching water quality score
+const fetchWaterQualityScore = async (): Promise<number> => {
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const scores = [10, 30, 50, 70, 90];
+  return scores[Math.floor(Math.random() * scores.length)];
+};
 
-export default function HomeScreen() {
+export default function MainScreen() {
+  const [score, setScore] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const loadScore = async () => {
+      setLoading(true);
+      const fetchedScore = await fetchWaterQualityScore();
+      setScore(fetchedScore);
+      setLoading(false);
+    };
+    loadScore();
+  }, []);
+
+  const backgroundColor = '#E6F3FF'; 
+
+  if (loading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor }]}>
+        <Text style={styles.loadingText}>Завантаження...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={[styles.rootContainer, { backgroundColor }]}>
+      <StatusBar barStyle={Platform.OS === 'ios' ? 'dark-content' : 'light-content'} backgroundColor={backgroundColor} />
+      <SafeAreaView style={styles.safeAreaContent}>
+        <View style={styles.mainContentContainer}>
+          <View style={styles.headerContainer}>
+            <Text style={styles.mainTitle}>Water Check</Text>
+            <Text style={styles.subtitle}>Щоденний моніторинг якості води</Text>
+          </View>
+          <ScoreCircle initialScore={score} onScoreUpdate={setScore} />
+          <View style={styles.spacer} /> 
+        </View>
+      </SafeAreaView>
+      <WaveAnimation score={score} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  rootContainer: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  loadingText: {
+    fontSize: 18,
+    color: '#333',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  safeAreaContent: {
+    flex: 1,
+    zIndex: 2, // Додано zIndex
+  },
+  mainContentContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 20 : 40,
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 30,
+  },
+  mainTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#003366',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#333333',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  spacer: {
+    flexGrow: 1,
   },
 });
