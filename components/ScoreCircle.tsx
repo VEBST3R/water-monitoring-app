@@ -47,28 +47,51 @@ const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }
     pressScale.value = withSpring(1);
   };
 
-  const handleScoreUpdate = () => {
-    console.log('ScoreCircle (Overlay) pressed! Current score:', currentScore);
+  const handleScoreUpdate = async () => {
+    console.log('Fetching Water Quality from Node-RED...');
     setIsLoading(true);
-    setTimeout(() => {
-      const newScore = Math.floor(Math.random() * 101);
-      const newTargetColor = getWaterQualityColor(newScore);
-      
-      previousColorSV.value = currentColorSV.value; // Зберігаємо поточний колір як попередній
-      currentColorSV.value = newTargetColor; // Оновлюємо цільовий колір
-      
-      setCurrentScore(newScore); // Оновлюємо рахунок (для тексту)
-      if (onScoreUpdate) {
-        onScoreUpdate(newScore); // Повідомляємо батьківський компонент
+    try {
+      // Замініть localhost на IP вашого комп'ютера, якщо тестуєте на фізичному пристрої
+      const response = await fetch('http://192.168.1.103:1880/getWQI');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      colorAnimation.value = 0; // Скидаємо анімацію
-      colorAnimation.value = withTiming(1, { duration: 500 }); // Запускаємо анімацію до нового кольору
-      
+      const data = await response.json();
+  
+      if (data && typeof data.wqi === 'number') {
+        const newWQI = data.wqi;
+        const waterParameters = data.parameters; // Об'єкт з pH, temp, etc.
+  
+        console.log('Received WQI:', newWQI);
+        console.log('Water Parameters:', waterParameters);
+  
+        // Оновлення кольору та тексту для WQI
+        const newTargetColor = getWaterQualityColor(newWQI); // Ваша функція getWaterQualityColor може потребувати адаптації під діапазон WQI (0-100)
+  
+        previousColorSV.value = currentColorSV.value;
+        currentColorSV.value = newTargetColor;
+  
+        setCurrentScore(newWQI); // Тут currentScore тепер представляє WQI
+        if (onScoreUpdate) {
+          onScoreUpdate(newWQI); // Передаємо WQI батьківському компоненту
+        }
+  
+        // Тут ви можете оновити стан для інших параметрів води, якщо хочете їх десь відобразити
+        // setDetailedParameters(waterParameters);
+  
+        colorAnimation.value = 0;
+        colorAnimation.value = withTiming(1, { duration: 500 });
+  
+      } else {
+        console.error('Invalid data format from Node-RED. Expected { "wqi": number, ... }:', data);
+        throw new Error('Invalid data format from Node-RED.');
+      }
+    } catch (error) {
+      console.error("Failed to fetch Water Quality:", error);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
-
   const animatedVisualCircleStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: pressScale.value }],
@@ -117,7 +140,7 @@ const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }
           ) : (
             <>
               <Text style={styles.scoreText}>{currentScore}</Text>
-              <Text style={styles.aqiText}>AQI</Text>
+              <Text style={styles.aqiText}>WQI</Text>
             </>
           )}
         </View>
