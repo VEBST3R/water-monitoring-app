@@ -200,13 +200,13 @@ const WaveAnimation: React.FC<WaveAnimationProps> = ({ score }) => {
 const styles = StyleSheet.create({
   mainContainer: { // Це "вікно перегляду" для хвиль
     width: '100%', // Займає повну ширину екрану
-    height: waveVisualHeight,
+    height: '46%', // Висота автоматично підлаштовується під вміст
     overflow: 'hidden', // Обрізає частини waveContentHolder, що виходять за межі
     position: 'absolute',
     bottom: 0,
     left: 0,
     backgroundColor: 'transparent', // Щоб було видно контент позаду
-    zIndex: 1, // Додано zIndex
+    zIndex: 100, // Додано zIndex
   },
   waveContentHolder: { // Цей View містить SVG подвійної ширини і саме він анімується
     position: 'absolute',
@@ -214,6 +214,7 @@ const styles = StyleSheet.create({
     // 'bottom' встановлюється динамічно для кожного шару
     width: individualWavePathLength * 2, // Містить два сегменти шляху хвилі
     height: waveVisualHeight,
+    zIndex: 100, // Додано zIndex
   },
 });
 

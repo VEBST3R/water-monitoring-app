@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { interpolateColor, useAnimatedProps, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import React, { useEffect, useRef, useState } from 'react'; // Added useRef
+import { ActivityIndicator, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native'; // Added Alert
+import Animated, { interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Svg, Circle as SvgCircle } from 'react-native-svg';
 import { getWaterQualityColor } from '../utils/colorUtils';
+import { WaterParameters } from './DetailedParametersView'; // Import WaterParameters type
 
 interface ScoreCircleProps {
   initialScore: number;
-  onScoreUpdate?: (newScore: number) => void;
+  onScoreUpdate?: (newScore: number, parameters?: WaterParameters) => void; // Modified to include parameters
+  // onSwipeLeft?: () => void; // Removed: Swipe will be handled by parent screen
 }
 
 const { width } = Dimensions.get('window');
@@ -15,29 +17,91 @@ const strokeWidth = 15;
 const radius = (circleSize - strokeWidth) / 2;
 
 const AnimatedCircle = Animated.createAnimatedComponent(SvgCircle);
+const PAN_ACTIVATION_THRESHOLD = 10; // Minimum pixels to move before pan activates
 
-const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }) => {
+const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }) => { // Removed onSwipeLeft from props
   const [currentScore, setCurrentScore] = useState(initialScore);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Замінюємо useRef на useSharedValue для кольорів
+  const [detailedParameters, setDetailedParameters] = useState<WaterParameters | null>(null); // Reinstated: This state is used in fetchDataAndUpdateState
+
   const previousColorSV = useSharedValue(getWaterQualityColor(initialScore));
   const currentColorSV = useSharedValue(getWaterQualityColor(initialScore));
-  const colorAnimation = useSharedValue(0); // 0 = початок анімації, 1 = кінець
-
+  const colorAnimation = useSharedValue(0); 
   const pressScale = useSharedValue(1);
+  // const offsetX = useSharedValue(0); // Removed: Swipe gesture handled by parent
+
+  // --- Auto-update logic ---
+  const intervalIdRef = useRef<number | null>(null); // Changed type to number for cross-platform compatibility with setInterval return type
+  const AUTO_UPDATE_INTERVAL = 5000; // 10 seconds
+
+  const fetchDataAndUpdateState = async (showLoading: boolean = true) => {
+    if (showLoading) {
+      runOnJS(setIsLoading)(true); // Ensure state update is on JS thread
+    }
+    console.log('Fetching Water Quality from Node-RED...');
+    try {
+      const response = await fetch('http://192.168.1.103:1880/getWQI');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+
+      if (data && typeof data.wqi === 'number') {
+        const newWQI = data.wqi;
+        const receivedParameters: WaterParameters = data.parameters || {};
+
+        runOnJS(setDetailedParameters)(receivedParameters);
+        runOnJS(setCurrentScore)(newWQI);
+
+        const newTargetColor = getWaterQualityColor(newWQI);
+        previousColorSV.value = currentColorSV.value;
+        currentColorSV.value = newTargetColor;
+        colorAnimation.value = 0;
+        colorAnimation.value = withTiming(1, { duration: 500 });
+
+        if (onScoreUpdate) {
+          runOnJS(onScoreUpdate)(newWQI, receivedParameters);
+        }
+      } else {
+        console.error('Invalid data format from Node-RED. Expected { "wqi": number, "parameters": object }:', data);
+        // runOnJS(Alert.alert)("Помилка", "Не вдалося оновити дані: невірний формат.");
+      }
+    } catch (error) {
+      console.error("Failed to fetch Water Quality:", error);
+      // runOnJS(Alert.alert)("Помилка", "Не вдалося підключитися до сервера для оновлення даних.");
+    } finally {
+      if (showLoading) {
+        runOnJS(setIsLoading)(false); // Ensure state update is on JS thread
+      }
+    }
+  };
 
   useEffect(() => {
-    // Оновлюємо колір при зміні initialScore ззовні
-    previousColorSV.value = currentColorSV.value; // Попередній колір - це поточний цільовий колір перед зміною
+    // Initial fetch can be done here if initialScore is just a placeholder
+    // fetchDataAndUpdateState(true); 
+
+    // Setup interval for auto-update
+    // Explicitly cast to any to satisfy TypeScript if environment differences cause issues, 
+    // or ensure correct NodeJS.Timeout vs number typing based on project setup.
+    intervalIdRef.current = setInterval(() => {
+      fetchDataAndUpdateState(false); // Auto-update in background
+    }, AUTO_UPDATE_INTERVAL) as any; // Added 'as any' to handle potential type mismatch for setInterval return
+
+    // Cleanup interval on unmount
+    return () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+      }
+    };
+  }, []); // Empty dependency array means this runs once on mount and cleans up on unmount
+
+  useEffect(() => {
+    previousColorSV.value = currentColorSV.value;
     currentColorSV.value = getWaterQualityColor(initialScore);
-    
-    setCurrentScore(initialScore); // Оновлюємо текст рахунку
-
-    colorAnimation.value = 0; // Скидаємо анімацію
-    colorAnimation.value = withTiming(1, { duration: 1500 }); // Запускаємо анімацію до нового кольору
-  }, [initialScore]); // Залежність тільки від initialScore
-
+    setCurrentScore(initialScore);
+    colorAnimation.value = 0;
+    colorAnimation.value = withTiming(1, { duration: 1500 });
+  }, [initialScore]);
 
   const handlePressIn = () => {
     pressScale.value = withTiming(0.95, { duration: 100 });
@@ -47,54 +111,13 @@ const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }
     pressScale.value = withSpring(1);
   };
 
-  const handleScoreUpdate = async () => {
-    console.log('Fetching Water Quality from Node-RED...');
-    setIsLoading(true);
-    try {
-      // Замініть localhost на IP вашого комп'ютера, якщо тестуєте на фізичному пристрої
-      const response = await fetch('http://192.168.1.103:1880/getWQI');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-  
-      if (data && typeof data.wqi === 'number') {
-        const newWQI = data.wqi;
-        const waterParameters = data.parameters; // Об'єкт з pH, temp, etc.
-  
-        console.log('Received WQI:', newWQI);
-        console.log('Water Parameters:', waterParameters);
-  
-        // Оновлення кольору та тексту для WQI
-        const newTargetColor = getWaterQualityColor(newWQI); // Ваша функція getWaterQualityColor може потребувати адаптації під діапазон WQI (0-100)
-  
-        previousColorSV.value = currentColorSV.value;
-        currentColorSV.value = newTargetColor;
-  
-        setCurrentScore(newWQI); // Тут currentScore тепер представляє WQI
-        if (onScoreUpdate) {
-          onScoreUpdate(newWQI); // Передаємо WQI батьківському компоненту
-        }
-  
-        // Тут ви можете оновити стан для інших параметрів води, якщо хочете їх десь відобразити
-        // setDetailedParameters(waterParameters);
-  
-        colorAnimation.value = 0;
-        colorAnimation.value = withTiming(1, { duration: 500 });
-  
-      } else {
-        console.error('Invalid data format from Node-RED. Expected { "wqi": number, ... }:', data);
-        throw new Error('Invalid data format from Node-RED.');
-      }
-    } catch (error) {
-      console.error("Failed to fetch Water Quality:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleScoreUpdate = () => {
+    fetchDataAndUpdateState(true); // Manual update shows loading indicator
   };
-  const animatedVisualCircleStyle = useAnimatedStyle(() => {
+
+  const animatedPressStyle = useAnimatedStyle(() => { // Renamed from animatedSwipeStyle
     return {
-      transform: [{ scale: pressScale.value }],
+      transform: [{ scale: pressScale.value }], // Only scale is needed now
     };
   });
 
@@ -113,39 +136,41 @@ const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }
   const activityIndicatorColor = getWaterQualityColor(currentScore);
 
   return (
-    <View style={styles.outerContainer}>
-      {/* Візуальна частина кола */}
-      <Animated.View style={[styles.visualCircle, animatedVisualCircleStyle]}>
-        <Svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}>
-          <AnimatedCircle
-            cx={circleSize / 2}
-            cy={circleSize / 2}
-            r={radius}
-            // stroke={color} // Replaced by animatedProps
-            animatedProps={animatedCircleProps}
-            strokeWidth={strokeWidth}
-            fill="transparent"
-          />
-        </Svg>
-      <TouchableOpacity
-        style={styles.touchableOverlay}
-        onPress={handleScoreUpdate}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.7} // Можна залишити стандартну або трохи змінити
-      />
-        <View style={styles.textVisualContainer} pointerEvents="none">
-          {isLoading ? (
-            <ActivityIndicator size="large" color={activityIndicatorColor} />
-          ) : (
-            <>
-              <Text style={styles.scoreText}>{currentScore}</Text>
-              <Text style={styles.aqiText}>WQI</Text>
-            </>
-          )}
-        </View>
+    // <GestureDetector gesture={panGesture}> // GestureDetector removed
+      <Animated.View style={[styles.outerContainer, animatedPressStyle]}> {/* Used animatedPressStyle */}
+        {/* Візуальна частина кола */}
+        <Animated.View style={[styles.visualCircle]}>
+          <Svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}>
+            <AnimatedCircle
+              cx={circleSize / 2}
+              cy={circleSize / 2}
+              r={radius}
+              // stroke={color} // Replaced by animatedProps
+              animatedProps={animatedCircleProps}
+              strokeWidth={strokeWidth}
+              fill="transparent"
+            />
+          </Svg>
+        <TouchableOpacity
+          style={styles.touchableOverlay}
+          onPress={handleScoreUpdate}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          activeOpacity={0.7} // Можна залишити стандартну або трохи змінити
+        />
+          <View style={styles.textVisualContainer} pointerEvents="none">
+            {isLoading ? (
+              <ActivityIndicator size="large" color={activityIndicatorColor} />
+            ) : (
+              <>
+                <Text style={styles.scoreText}>{currentScore}</Text>
+                <Text style={styles.aqiText}>WQI</Text>
+              </>
+            )}
+          </View>
+        </Animated.View>
       </Animated.View>
-    </View>
+    // </GestureDetector> // GestureDetector removed
   );
 };
 
@@ -156,7 +181,7 @@ const styles = StyleSheet.create({
     marginVertical: 30,
     position: 'relative', // Важливо для абсолютного позиціонування touchableOverlay
     // backgroundColor: 'rgba(0, 0, 255, 0.2)', // Для налагодження розмірів outerContainer
-    zIndex: 5
+    zIndex: 100
   },
   visualCircle: { // Візуальна частина
     width: '100%',
@@ -187,7 +212,7 @@ const styles = StyleSheet.create({
     width: '100%', // Заповнює outerContainer
     height: '100%', // Заповнює outerContainer
     borderRadius: circleSize / 2, // Якщо ви хочете, щоб він мав круглу форму (для візуалізації з фоном)
-    zIndex: 20
+    zIndex: 1000
   },
   scoreText: {
     fontSize: circleSize * 0.3,
