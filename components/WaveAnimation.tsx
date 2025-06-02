@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, interpolateColor, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { Dimensions, StyleSheet } from 'react-native';
+import Animated, { cancelAnimation, Easing, Extrapolate, interpolate, interpolateColor, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { getWaveColor } from '../utils/colorUtils'; // Переконайтесь, що шлях правильний
 
 interface WaveAnimationProps {
   score: number;
+  translateY?: Animated.SharedValue<number>; // Додаємо опціональний shared value для анімації
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -47,7 +48,7 @@ const createSineWavePath = (
 };
 
 
-const WaveAnimation: React.FC<WaveAnimationProps> = ({ score }) => {
+const WaveAnimation: React.FC<WaveAnimationProps> = ({ score, translateY }) => {
   const waveProgress1 = useSharedValue(0); // 0 to 1
   const waveProgress2 = useSharedValue(0); // 0 to 1
   const waveProgress3 = useSharedValue(0); // 0 to 1
@@ -161,11 +162,33 @@ const WaveAnimation: React.FC<WaveAnimationProps> = ({ score }) => {
       };
     }),
   ];
-
-  const layerBaseOffsetY = waveVisualHeight * 0.25; // Базове вертикальне зміщення між шарами
+  const layerBaseOffsetY = waveVisualHeight * 0.25; // Базове вертикальне зміщення між шарами  // Анімований стиль для головного контейнера хвиль
+  const animatedMainContainerStyle = useAnimatedStyle(() => {
+    if (translateY) {
+      return {
+        transform: [
+          { 
+            translateY: interpolate(
+              translateY.value,
+              [0, screenHeight],
+              [0, screenHeight], // Хвилі зсуваються вниз разом з головним меню
+              Extrapolate.CLAMP
+            )
+          }
+        ],
+        opacity: interpolate(
+          translateY.value,
+          [0, screenHeight * 0.15, screenHeight],
+          [1, 0.95, 0.85], // Посилена зміна прозорості для кращого ефекту глибини
+          Extrapolate.CLAMP
+        )
+      };
+    }
+    return {};
+  });
 
   return (
-    <View style={styles.mainContainer}>
+    <Animated.View style={[styles.mainContainer, animatedMainContainerStyle]}>
       {waveParams.map((params, index) => {
         const style = animatedStyles[index];
         const dPath = wavePaths[index];
@@ -193,7 +216,7 @@ const WaveAnimation: React.FC<WaveAnimationProps> = ({ score }) => {
           </Animated.View>
         );
       })}
-    </View>
+    </Animated.View>
   );
 };
 

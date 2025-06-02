@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Extrapolate, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, Extrapolate, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import DetailedParametersView from '@/components/DetailedParametersView';
+import DeviceSelectionView from '@/components/DeviceSelectionView';
 import DeviceStatusView from '@/components/DeviceStatusView';
 import ScoreCircle from '@/components/ScoreCircle';
 import { ThemedText } from '@/components/ThemedText';
@@ -19,35 +20,82 @@ const CENTRAL_SERVER_ENDPOINT = '192.168.1.103:1880';
 const ASYNC_STORAGE_DEVICES_KEY = '@userDevices';
 const ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY = '@currentDeviceIndex';
 
-// Helper function to format time
+// Змінюємо функцію formatTime для кращого відображення секунд
 const formatTime = (seconds: number) => {
-  if (seconds < 0) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+  if (seconds < 0) return '0с';
+  return `${seconds}с`; // Просто показуємо секунди
 };
 
 export default function HomeScreen() {
+  // State variables
   const [userDevices, setUserDevices] = useState<UserDevice[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
   const [score, setScore] = useState(0); 
   const [detailedParams, setDetailedParams] = useState<any>(null);
   const [showDetailedView, setShowDetailedView] = useState(false);
-  const [showDeviceStatusView, setShowDeviceStatusView] = useState(false); // New state for device status view
-  const translateX = useSharedValue(0);
+  const [showDeviceStatusView, setShowDeviceStatusView] = useState(false);
+  const [showDeviceSelectionView, setShowDeviceSelectionView] = useState(false);
   const [isLoading, setIsLoading] = useState(true); 
-
   const [isAddDeviceModalVisible, setAddDeviceModalVisible] = useState(false);
   const [newUserDeviceName, setNewUserDeviceName] = useState('');
-  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState(''); // Added state for 6-digit device ID
-
+  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [nextUpdateTimer, setNextUpdateTimer] = useState(0);
-  const nextUpdateIntervalRef = useRef<number | null>(null); // Changed type to number | null
-
+  
+  // Shared values for animations
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  
+  // Refs
+  const nextUpdateIntervalRef = useRef<number | null>(null);
+  const dataUpdateIntervalRef = useRef<number | null>(null);
+  
+  // Constants
+  const UPDATE_INTERVAL = 5000;
   const currentDevice = userDevices[currentDeviceIndex];
+  
+  // ✅ Define ALL useCallback hooks together in the same place
+  const handleScoreUpdate = useCallback((newScore: number, details: any) => {
+    setScore(newScore); 
+    setDetailedParams(details);
+    setConnectionStatus('connected');
+    setLastUpdateTimestamp(Date.now());
+  }, []);
+  
+  // Оновлена функція оновлення даних - Moved up before it's used
+  const updateCurrentDeviceData = useCallback(() => {
+    if (currentDevice?.serverConfig?.deviceId && connectionStatus !== 'error') {
+      // Напряму робимо запит до API для отримання даних
+      fetch(`http://${CENTRAL_SERVER_ENDPOINT}/api/getWQI?device=${currentDevice.serverConfig.deviceId}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data && typeof data.wqi === 'number' && data.parameters) {
+            const newScore = Math.max(0, Math.min(100, Math.round(data.wqi)));
+            setScore(newScore);
+            setDetailedParams(data.parameters);
+            setConnectionStatus('connected');
+            setLastUpdateTimestamp(Date.now());
+          }
+        })
+        .catch(error => {
+          console.error("Fetch error:", error);
+          setConnectionStatus('error');
+        });
+    }
+  }, [currentDevice, connectionStatus, CENTRAL_SERVER_ENDPOINT]);
 
+  // Now define handleScoreCirclePress AFTER updateCurrentDeviceData is defined
+  const handleScoreCirclePress = useCallback(() => {
+    // Запускаємо оновлення даних при натисканні та дозволяємо внутрішню анімацію ScoreCircle
+    updateCurrentDeviceData();
+  }, [updateCurrentDeviceData]);
+  
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -117,6 +165,16 @@ export default function HomeScreen() {
       return;
     }
 
+    // Перевіряємо, чи вже існує пристрій з таким ID
+    const deviceExists = userDevices.some(device => 
+      device.serverConfig?.deviceId === trimmedDeviceId
+    );
+    
+    if (deviceExists) {
+      Alert.alert("Помилка", `Пристрій з ID '${trimmedDeviceId}' вже додано до вашого списку.`);
+      return;
+    }
+
     // Validate device ID with the server
     try {
       const validationUrl = `http://${CENTRAL_SERVER_ENDPOINT}/api/getWQI?device=${trimmedDeviceId}`;
@@ -151,7 +209,18 @@ export default function HomeScreen() {
     const updatedDevices = [...userDevices, newDevice];
     setUserDevices(updatedDevices);
     setCurrentDeviceIndex(updatedDevices.length - 1); 
+    
+    // Закриваємо модальне вікно додавання пристрою
     setAddDeviceModalVisible(false);
+    
+    // Закриваємо меню вибору пристрою та перекидаємо в головне меню
+    setShowDeviceSelectionView(false);
+    translateY.value = withTiming(0, { 
+      duration: 500,
+      easing: Easing.bezier(0.16, 1, 0.3, 1)
+    });
+    
+    // Скидаємо стани для нового пристрою
     setScore(0); 
     setDetailedParams(null);
     setConnectionStatus('disconnected'); 
@@ -164,45 +233,75 @@ export default function HomeScreen() {
     setLastUpdateTimestamp(null);
   }, [currentDevice?.id]); 
 
-  const handleScoreUpdate = useCallback((newScore: number, details: any) => {
-    setScore(newScore); 
-    setDetailedParams(details);
-    setConnectionStatus('connected');
-    setLastUpdateTimestamp(Date.now());
-  }, []);
-
   const handleFetchError = (error: string) => { // Changed error type to string
     // console.error("Fetch error from ScoreCircle:", error);
     setConnectionStatus('error');
     // Optionally, display a more user-friendly message or log the error
   };
 
+  const handleDeviceSelect = (index: number) => {
+    // Закриваємо меню вибору пристрою в будь-якому випадку
+    setShowDeviceSelectionView(false);
+    translateY.value = withTiming(0, { 
+      duration: 500,
+      easing: Easing.bezier(0.16, 1, 0.3, 1)
+    });
+    
+    // Скидаємо стани тільки якщо вибрано інший пристрій
+    if (index !== currentDeviceIndex) {
+      setCurrentDeviceIndex(index);
+      // Скидаємо інші стани при перемиканні пристроїв
+      setScore(0);
+      setDetailedParams(null);
+      setConnectionStatus('disconnected');
+      setLastUpdateTimestamp(null);
+    }
+  };
+
+  const handleClearDevices = () => {
+    setUserDevices([]);
+    setCurrentDeviceIndex(0);
+    setShowDeviceSelectionView(false);
+    translateY.value = withTiming(0, { 
+      duration: 500, // Збільшено тривалість для повільнішого повернення
+      easing: Easing.bezier(0.16, 1, 0.3, 1) // Плавніша крива анімації
+    });
+    setScore(0);
+    setDetailedParams(null);
+    setConnectionStatus('disconnected');
+    setLastUpdateTimestamp(null);
+  };
+
+  // Змінюємо ефект для таймера оновлення
   useEffect(() => {
     if (nextUpdateIntervalRef.current) {
       clearInterval(nextUpdateIntervalRef.current);
     }
+    
     if (connectionStatus === 'connected' && lastUpdateTimestamp) {
       const updateCountdown = () => {
-        const elapsed = Math.floor((Date.now() - lastUpdateTimestamp) / 100);
-        const nextUpdateIn = Math.max(0, 300 - elapsed); 
+        const elapsed = Math.floor((Date.now() - lastUpdateTimestamp) / 1000);
+        const nextUpdateIn = Math.max(0, Math.floor(UPDATE_INTERVAL / 1000) - (elapsed % Math.floor(UPDATE_INTERVAL / 1000)));
         setNextUpdateTimer(nextUpdateIn);
       };
+      
       updateCountdown(); 
-      nextUpdateIntervalRef.current = setInterval(updateCountdown, 1000) as unknown as number; // Cast to number
+      nextUpdateIntervalRef.current = setInterval(updateCountdown, 1000) as unknown as number;
     } else {
       setNextUpdateTimer(0);
     }
+    
     return () => {
       if (nextUpdateIntervalRef.current) {
         clearInterval(nextUpdateIntervalRef.current);
       }
     };
   }, [connectionStatus, lastUpdateTimestamp]);
-
+  
   const panGesture = Gesture.Pan()
     .activeOffsetX([-20, 20]) 
     .onUpdate((event) => {
-      if (userDevices.length === 0) return;
+      if (userDevices.length === 0 || showDeviceSelectionView) return; // Disable horizontal swipes when device selection is shown
       if (showDetailedView) {
         // When detailed view is shown (parameters), main screen is at -screenWidth.
         // Swiping right (positive event.translationX) should bring main screen towards 0.
@@ -219,51 +318,143 @@ export default function HomeScreen() {
       }
     })
     .onEnd((event) => {
-      if (userDevices.length === 0) return;
+      if (userDevices.length === 0 || showDeviceSelectionView) return; // Disable horizontal swipes when device selection is shown
       const { translationX } = event;
 
       if (showDetailedView) { // Currently showing detailed parameters view (left of main)
         if (translationX > screenWidth / 4) { // Swiped right enough to close it
           runOnJS(setShowDetailedView)(false);
-          translateX.value = withTiming(0);
+          translateX.value = withTiming(0, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         } else { // Not swiped enough, snap back to detailed view
-          translateX.value = withTiming(-screenWidth);
+          translateX.value = withTiming(-screenWidth, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         }
       } else if (showDeviceStatusView) { // Currently showing device status view (right of main)
         if (translationX < -screenWidth / 4) { // Swiped left enough to close it
           runOnJS(setShowDeviceStatusView)(false);
-          translateX.value = withTiming(0);
+          translateX.value = withTiming(0, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         } else { // Not swiped enough, snap back to device status view
-          translateX.value = withTiming(screenWidth);
+          translateX.value = withTiming(screenWidth, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         }
       } else { // Currently showing main screen
         if (translationX < -screenWidth / 4) { // Swiped left for detailed params
           runOnJS(setShowDetailedView)(true);
-          translateX.value = withTiming(-screenWidth);
+          translateX.value = withTiming(-screenWidth, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         } else if (translationX > screenWidth / 4) { // Swiped right for device status
           runOnJS(setShowDeviceStatusView)(true);
-          translateX.value = withTiming(screenWidth);
+          translateX.value = withTiming(screenWidth, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         } else { // Not swiped enough, snap back to main screen
-          translateX.value = withTiming(0);
+          translateX.value = withTiming(0, { duration: 300, easing: Easing.bezier(0.25, 0.1, 0.25, 1) });
         }
       }
     });
 
   const verticalSwipeGesture = Gesture.Pan()
     .activeOffsetY([-20, 20]) 
+    .onUpdate((event) => {
+      if (showDeviceSelectionView) {
+        // When device selection is shown, handle swipe up to close
+        // Constrain movement to prevent overscrolling
+        translateY.value = Math.max(0, Math.min(screenHeight, screenHeight + event.translationY));
+      } else if (!showDetailedView && !showDeviceStatusView) {
+        // When main screen is shown, handle swipe down to open device selection
+        // Only allow downward swipes to open device selection
+        translateY.value = Math.max(0, Math.min(screenHeight, event.translationY));
+      }
+    })
     .onEnd((event) => {
-      if (userDevices.length <= 1) return; 
-      const swipeThreshold = screenHeight / 6;
-      if (event.translationY < -swipeThreshold) { 
-        runOnJS(setCurrentDeviceIndex)((prevIndex) => (prevIndex + 1) % userDevices.length);
-      } else if (event.translationY > swipeThreshold) { 
-        runOnJS(setCurrentDeviceIndex)((prevIndex) => (prevIndex - 1 + userDevices.length) % userDevices.length);
+      const swipeThreshold = screenHeight / 4; // Reduced threshold for easier interaction
+      
+      if (showDeviceSelectionView) {
+        // Device selection is open - handle swipe up to close
+        if (event.translationY < -swipeThreshold || event.velocityY < -500) {
+          // Close if swiped up far enough or with enough velocity
+          runOnJS(setShowDeviceSelectionView)(false);
+          translateY.value = withTiming(0, { 
+            duration: 500, // Збільшено тривалість для повільнішого повернення 
+            easing: Easing.bezier(0.16, 1, 0.3, 1) // Плавніша крива анімації
+          });
+        } else {
+          // Not swiped enough, snap back to open state
+          translateY.value = withTiming(screenHeight, { 
+            duration: 400, // Середня тривалість для повернення назад
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1) 
+          });
+        }
+      } else if (!showDetailedView && !showDeviceStatusView) {
+        // Main screen is shown - handle device switching or opening device selection
+        if (event.translationY > swipeThreshold || event.velocityY > 500) {
+          // Swipe down - open device selection if there are devices
+          if (userDevices.length > 0) {
+            runOnJS(setShowDeviceSelectionView)(true);
+            translateY.value = withTiming(screenHeight, { 
+              duration: 400, // Збалансована тривалість для плавного відкриття
+              easing: Easing.bezier(0.33, 0.1, 0.38, 1) // Крива з акцентом на початок руху
+            });
+          } else {
+            translateY.value = withTiming(0, { 
+              duration: 400, 
+              easing: Easing.bezier(0.16, 1, 0.3, 1) 
+            });
+          }
+        } else if (event.translationY < -swipeThreshold || event.velocityY < -500) { 
+          // Swipe up - switch to next device (legacy behavior)
+          if (userDevices.length > 1) {
+            runOnJS(setCurrentDeviceIndex)((prevIndex) => (prevIndex + 1) % userDevices.length);
+          }
+          translateY.value = withTiming(0, { 
+            duration: 400, 
+            easing: Easing.bezier(0.16, 1, 0.3, 1)  
+          });
+        } else {
+          // Not enough movement, return to original position
+          translateY.value = withTiming(0, { 
+            duration: 350, 
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1) 
+          });
+        }
       }
     });
     
   const animatedMainScreenStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ translateX: translateX.value }],
+      transform: [
+        { translateX: translateX.value },
+        { 
+          translateY: interpolate(
+            translateY.value,
+            [0, screenHeight],
+            [0, screenHeight], // Main screen moves down by the same amount as device selection comes down
+            Extrapolate.CLAMP
+          )
+        }
+      ],
+    };
+  });
+
+  const animatedDeviceSelectionViewStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          translateY: interpolate(
+            translateY.value,
+            [0, screenHeight],
+            [-screenHeight, 0], // Device selection slides down from -screenHeight to 0
+            Extrapolate.CLAMP
+          ),
+        },
+      ],
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 200,
+      opacity: interpolate(
+        translateY.value,
+        [0, screenHeight * 0.15], // Показувати швидше для плавнішого переходу
+        [0, 1],
+        Extrapolate.CLAMP
+      ),
     };
   });
 
@@ -378,12 +569,45 @@ export default function HomeScreen() {
     );
   };
 
-  const combinedGesture = Gesture.Race(panGesture, verticalSwipeGesture);
-  const waveScore = userDevices.length === 0 ? 50 : score; 
+  const handleDeleteDevice = (deviceId: string) => {
+    Alert.alert(
+      "Видалення пристрою",
+      "Ви впевнені, що хочете видалити цей пристрій?",
+      [
+        { text: "Скасувати", style: "cancel" },
+        { 
+          text: "Видалити", 
+          style: "destructive",
+          onPress: () => {
+            const updatedDevices = userDevices.filter(device => device.id !== deviceId);
+            setUserDevices(updatedDevices);
+            
+            // Якщо видаляємо поточний пристрій або список стає порожнім
+            if (updatedDevices.length === 0 || deviceId === userDevices[currentDeviceIndex].id) {
+              setCurrentDeviceIndex(0);
+              setScore(0);
+              setDetailedParams(null);
+              setConnectionStatus('disconnected');
+              setLastUpdateTimestamp(null);
+            } 
+            // Якщо видаляємо пристрій з індексом, меншим ніж поточний
+            else if (userDevices.findIndex(d => d.id === deviceId) < currentDeviceIndex) {
+              setCurrentDeviceIndex(currentDeviceIndex - 1);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Додаємо визначення combinedGesture, яке було видалено
+  const combinedGesture = showDeviceSelectionView 
+    ? verticalSwipeGesture // Only allow vertical swipes when device selection is shown
+    : Gesture.Race(panGesture, verticalSwipeGesture); // Normal gesture handling
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.light.background }}> {/* New static root View */}
-      <WaveAnimation score={waveScore} /> {/* WaveAnimation as a background */}
+    <View style={{ flex: 1, backgroundColor: Colors.light.background }}>
+      <WaveAnimation score={userDevices.length === 0 ? 50 : score} translateY={translateY} />
       
       <GestureDetector gesture={combinedGesture}>
         {/* This Animated.View needs a transparent background to see WaveAnimation behind it */}
@@ -415,12 +639,12 @@ export default function HomeScreen() {
                   key={currentDevice.id} 
                   size={screenWidth * 0.7}
                   strokeWidth={20}
-                  initialScore={score} // Pass the score from HomeScreen state
+                  initialScore={score}
                   serverEndpoint={CENTRAL_SERVER_ENDPOINT}
                   deviceId={currentDevice.serverConfig.deviceId}
                   onScoreUpdate={handleScoreUpdate}
                   onFetchError={handleFetchError}
-                  // isAddMode is implicitly false or can be omitted
+                  onPress={handleScoreCirclePress}
                 />
               ) : currentDevice ? (
                 <View style={styles.centeredMessageContainer}>
@@ -444,6 +668,19 @@ export default function HomeScreen() {
           {userDevices.length > 0 && currentDevice && (
             <Animated.View style={[styles.deviceStatusViewContainer, animatedDeviceStatusViewStyle]}> 
               <DeviceStatusView device={currentDevice} />
+            </Animated.View>
+          )}
+
+          {/* Device Selection View */}
+          {userDevices.length > 0 && (
+            <Animated.View style={[styles.deviceSelectionViewContainer, animatedDeviceSelectionViewStyle]}>
+              <DeviceSelectionView
+                devices={userDevices}
+                currentDeviceIndex={currentDeviceIndex}
+                onDeviceSelect={handleDeviceSelect}
+                onDeleteDevice={handleDeleteDevice} // Додаємо новий проп для видалення окремого пристрою
+                // onClearDevices={handleClearDevices} // Прибираємо проп очищення списку
+              />
             </Animated.View>
           )}
 
@@ -605,6 +842,11 @@ const styles = StyleSheet.create({
     // right: 0,
     // bottom: 0,
     // zIndex: 150, // Already applied in animated style
+  },
+  deviceSelectionViewContainer: {
+    width: screenWidth,
+    height: screenHeight,
+    backgroundColor: 'transparent',
   },
   fab: {
     position: 'absolute',
