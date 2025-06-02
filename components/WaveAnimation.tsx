@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     backgroundColor: 'transparent', // Щоб було видно контент позаду
-    zIndex: 100, // Додано zIndex
+    zIndex: 0, // Змінено zIndex з 100 на 0
   },
   waveContentHolder: { // Цей View містить SVG подвійної ширини і саме він анімується
     position: 'absolute',
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     // 'bottom' встановлюється динамічно для кожного шару
     width: individualWavePathLength * 2, // Містить два сегменти шляху хвилі
     height: waveVisualHeight,
-    zIndex: 100, // Додано zIndex
+    // zIndex: 100, // Видалено статичний zIndex, динамічний zIndex застосовується в компоненті
   },
 });
 

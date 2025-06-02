@@ -1,14 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react'; // Added useRef
-import { ActivityIndicator, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native'; // Added Alert
-import Animated, { interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { Svg, Circle as SvgCircle } from 'react-native-svg';
+import { Colors } from '@/constants/Colors'; // Import Colors for default tint
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, AppStateStatus, Dimensions, NativeEventSubscription, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native'; // Added NativeEventSubscription
+import Animated, { Easing, interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Circle, Svg } from 'react-native-svg'; // Imported Circle
 import { getWaterQualityColor } from '../utils/colorUtils';
 import { WaterParameters } from './DetailedParametersView'; // Import WaterParameters type
 
-interface ScoreCircleProps {
-  initialScore: number;
-  onScoreUpdate?: (newScore: number, parameters?: WaterParameters) => void; // Modified to include parameters
-  // onSwipeLeft?: () => void; // Removed: Swipe will be handled by parent screen
+export interface ScoreCircleProps {
+  initialScore?: number; // Made optional
+  size: number;
+  strokeWidth: number;
+  serverEndpoint?: string; // Made optional
+  deviceId?: string; // Made optional
+  onScoreUpdate?: (score: number, detailedParams: any) => void;
+  onFetchError?: (error: string) => void;
+  isAddMode?: boolean;
+  onAddButtonPress?: () => void;
+  style?: ViewStyle;
 }
 
 const { width } = Dimensions.get('window');
@@ -16,215 +25,326 @@ const circleSize = width * 0.6;
 const strokeWidth = 15;
 const radius = (circleSize - strokeWidth) / 2;
 
-const AnimatedCircle = Animated.createAnimatedComponent(SvgCircle);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const PAN_ACTIVATION_THRESHOLD = 10; // Minimum pixels to move before pan activates
+const MIN_FETCH_INTERVAL = 1000; // 1 second - Defined MIN_FETCH_INTERVAL
 
-const ScoreCircle: React.FC<ScoreCircleProps> = ({ initialScore, onScoreUpdate }) => { // Removed onSwipeLeft from props
+const ScoreCircle: React.FC<ScoreCircleProps> = ({ 
+  initialScore = 0,
+  size,
+  strokeWidth,
+  serverEndpoint,
+  deviceId,
+  onScoreUpdate,
+  onFetchError,
+  isAddMode = false,
+  onAddButtonPress,
+  style,
+}) => {
   const [currentScore, setCurrentScore] = useState(initialScore);
-  const [isLoading, setIsLoading] = useState(false);
+  const [wqiText, setWqiText] = useState('WQI');
+  const [isLoading, setIsLoading] = useState(!isAddMode); // Only load if not in add mode
+  const [error, setError] = useState<string | null>(null);
   const [detailedParameters, setDetailedParameters] = useState<WaterParameters | null>(null); // Reinstated: This state is used in fetchDataAndUpdateState
 
   const previousColorSV = useSharedValue(getWaterQualityColor(initialScore));
   const currentColorSV = useSharedValue(getWaterQualityColor(initialScore));
   const colorAnimation = useSharedValue(0); 
   const pressScale = useSharedValue(1);
-  // const offsetX = useSharedValue(0); // Removed: Swipe gesture handled by parent
+  const appState = useRef(AppState.currentState);
+  const updateIntervalRef = useRef<number | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
 
-  // --- Auto-update logic ---
-  const intervalIdRef = useRef<number | null>(null); // Changed type to number for cross-platform compatibility with setInterval return type
-  const AUTO_UPDATE_INTERVAL = 5000; // 10 seconds
+  const defaultStrokeColor = Colors.light.tint; // Defined here
 
-  const fetchDataAndUpdateState = async (showLoading: boolean = true) => {
-    if (showLoading) {
-      runOnJS(setIsLoading)(true); // Ensure state update is on JS thread
+  // Define animated props for the circle's stroke property
+  const animatedCircleStrokeProps = useAnimatedProps(() => {
+    'worklet';
+    if (isAddMode) {
+      return {
+        stroke: defaultStrokeColor, // Use static color in add mode
+      };
+    } else {
+      return {
+        stroke: currentColorSV.value, // Use shared value for dynamic color
+      };
     }
-    console.log('Fetching Water Quality from Node-RED...');
+  }, [isAddMode]); // Recreate worklet if isAddMode changes
+
+  // Define fetchDataAndUpdateState before fetchDataRef
+  const fetchDataAndUpdateState = useCallback(async (isInitialFetch = false) => {
+    if (isAddMode || !serverEndpoint || !deviceId) {
+      if (isAddMode && onAddButtonPress && isInitialFetch) { 
+        // If it's a manual press on the add button, call onAddButtonPress
+        // This logic might need refinement based on exact intention of isManualFetch vs isInitialFetch
+        // For now, let's assume onAddButtonPress is called by the handlePress method directly for add mode.
+      }
+      return;
+    }
+    if (Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL && !isInitialFetch) {
+      // console.log("Fetch throttled");
+      return;
+    }
+    lastFetchTimeRef.current = Date.now();
+    // console.log(`Fetching data for device: ${deviceId} from ${serverEndpoint}`);
+    setIsLoading(true);
+    setError(null);
     try {
-      const response = await fetch('http://192.168.1.103:1880/getWQI');
+      const response = await fetch(`http://${serverEndpoint}/getWQI?device=${deviceId}`);
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        // console.error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        throw new Error(`Помилка сервера: ${response.status} - ${errorText || 'Невідома помилка'}`);
       }
       const data = await response.json();
+      // console.log("Data fetched:", data);
 
-      if (data && typeof data.wqi === 'number') {
-        const newWQI = data.wqi;
-        const receivedParameters: WaterParameters = data.parameters || {};
-
-        runOnJS(setDetailedParameters)(receivedParameters);
-        runOnJS(setCurrentScore)(newWQI);
-
-        const newTargetColor = getWaterQualityColor(newWQI);
-        previousColorSV.value = currentColorSV.value;
-        currentColorSV.value = newTargetColor;
+      if (data && typeof data.wqi === 'number' && data.parameters) {
+        const newScore = Math.max(0, Math.min(100, Math.round(data.wqi)));
+        setCurrentScore(newScore);
+        setWqiText('WQI');
         colorAnimation.value = 0;
         colorAnimation.value = withTiming(1, { duration: 500 });
-
+        previousColorSV.value = currentColorSV.value;
+        currentColorSV.value = getWaterQualityColor(newScore);
         if (onScoreUpdate) {
-          runOnJS(onScoreUpdate)(newWQI, receivedParameters);
+          runOnJS(onScoreUpdate)(newScore, data.parameters);
         }
       } else {
-        console.error('Invalid data format from Node-RED. Expected { "wqi": number, "parameters": object }:', data);
-        // runOnJS(Alert.alert)("Помилка", "Не вдалося оновити дані: невірний формат.");
+        // console.error("Invalid data structure received:", data);
+        throw new Error('Некоректна структура даних від сервера.');
       }
-    } catch (error) {
-      console.error("Failed to fetch Water Quality:", error);
-      // runOnJS(Alert.alert)("Помилка", "Не вдалося підключитися до сервера для оновлення даних.");
+    } catch (e: any) {
+      // console.error("Failed to fetch WQI data:", e);
+      setError(e.message || 'Не вдалося завантажити дані. Перевірте з\'єднання.');
+      if (onFetchError) {
+        // runOnJS(onFetchError)(e); // Changed to pass e.message
+        runOnJS(onFetchError)(e.message || 'Unknown fetch error');
+      }
     } finally {
-      if (showLoading) {
-        runOnJS(setIsLoading)(false); // Ensure state update is on JS thread
+      setIsLoading(false);
+    }
+  }, [serverEndpoint, deviceId, /*currentScore,*/ previousColorSV, currentColorSV, colorAnimation, onScoreUpdate, onFetchError, isAddMode, onAddButtonPress]); // Removed currentScore from deps as it causes re-creation too often, added onAddButtonPress
+
+  const fetchDataRef = useRef(fetchDataAndUpdateState);
+
+  useEffect(() => {
+    fetchDataRef.current = fetchDataAndUpdateState;
+  }, [fetchDataAndUpdateState]);
+
+  const circumference = 2 * Math.PI * radius;
+
+  // useEffect for AppState listener - REMOVING LOGS
+  useEffect(() => {
+    if (isAddMode || !serverEndpoint || !deviceId) {
+      return;
+    }
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        fetchDataRef.current();
       }
+      appState.current = nextAppState;
+    };
+
+    let appStateSubscription: NativeEventSubscription | undefined;
+
+    try {
+      fetchDataRef.current(true); // Initial fetch
+      const subscription = AppState.addEventListener('change', handleAppStateChange);
+      if (subscription && typeof subscription.remove === 'function') {
+        appStateSubscription = subscription; 
+      } else {
+        // console.warn("ScoreCircle: AppState.addEventListener did not return a valid subscription object. DeviceID:", deviceId, "Returned value:", subscription);
+      }
+    } catch (e) {
+      // console.error("ScoreCircle: Error during AppState.addEventListener or initial fetch:", e, "DeviceID:", deviceId);
+      return; 
+    }
+
+    return () => {
+      if (appStateSubscription) { 
+        try {
+          appStateSubscription.remove();
+        } catch (e) {
+          // console.error("ScoreCircle AppState Cleanup: Error during appStateSubscription.remove() call:", e, "DeviceID:", deviceId, "Subscription object:", appStateSubscription);
+        }
+      }
+    };
+  }, [isAddMode, serverEndpoint, deviceId]); // Dependencies: re-run if these change. fetchDataRef and appState.current are stable.
+
+  useEffect(() => {
+    if (isAddMode || !serverEndpoint || !deviceId) {
+      if (updateIntervalRef.current) {
+          clearInterval(updateIntervalRef.current);
+          updateIntervalRef.current = null;
+      }
+      return;
+    }
+    
+    const intervalId = setInterval(() => {
+      fetchDataAndUpdateState();
+    }, 300000); // 5 minutes
+    updateIntervalRef.current = intervalId; // This should now be compatible
+
+    return () => {
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+      }
+    };
+  }, [isAddMode, serverEndpoint, deviceId, fetchDataAndUpdateState]); // Added fetchDataAndUpdateState to dependencies
+
+  const handlePress = () => {
+    if (isAddMode) {
+      if (onAddButtonPress) {
+        onAddButtonPress();
+      }
+      // Optional: Add a small animation for the add button press
+      pressScale.value = withTiming(0.9, { duration: 150, easing: Easing.inOut(Easing.ease) }, () => {
+        pressScale.value = withTiming(1, { duration: 150, easing: Easing.inOut(Easing.ease) });
+      });
+      return;
+    }
+
+    pressScale.value = withTiming(0.9, { duration: 150, easing: Easing.inOut(Easing.ease) }, () => {
+      pressScale.value = withTiming(1, { duration: 150, easing: Easing.inOut(Easing.ease) });
+    });
+    if (!isLoading) {
+      fetchDataAndUpdateState();
     }
   };
 
-  useEffect(() => {
-    // Initial fetch can be done here if initialScore is just a placeholder
-    // fetchDataAndUpdateState(true); 
-
-    // Setup interval for auto-update
-    // Explicitly cast to any to satisfy TypeScript if environment differences cause issues, 
-    // or ensure correct NodeJS.Timeout vs number typing based on project setup.
-    intervalIdRef.current = setInterval(() => {
-      fetchDataAndUpdateState(false); // Auto-update in background
-    }, AUTO_UPDATE_INTERVAL) as any; // Added 'as any' to handle potential type mismatch for setInterval return
-
-    // Cleanup interval on unmount
-    return () => {
-      if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current);
-      }
-    };
-  }, []); // Empty dependency array means this runs once on mount and cleans up on unmount
-
-  useEffect(() => {
-    previousColorSV.value = currentColorSV.value;
-    currentColorSV.value = getWaterQualityColor(initialScore);
-    setCurrentScore(initialScore);
-    colorAnimation.value = 0;
-    colorAnimation.value = withTiming(1, { duration: 1500 });
-  }, [initialScore]);
-
-  const handlePressIn = () => {
-    pressScale.value = withTiming(0.95, { duration: 100 });
-  };
-
-  const handlePressOut = () => {
-    pressScale.value = withSpring(1);
-  };
-
-  const handleScoreUpdate = () => {
-    fetchDataAndUpdateState(true); // Manual update shows loading indicator
-  };
-
-  const animatedPressStyle = useAnimatedStyle(() => { // Renamed from animatedSwipeStyle
+  const animatedStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ scale: pressScale.value }], // Only scale is needed now
+      transform: [{ scale: pressScale.value }],
     };
   });
 
-  const animatedCircleProps = useAnimatedProps(() => {
-    const strokeColor = interpolateColor(
-      colorAnimation.value, // Прогрес анімації
-      [0, 1], // Діапазон вхідних значень
-      [previousColorSV.value, currentColorSV.value] // Кольори для інтерполяції
+  const animatedTextStyle = useAnimatedStyle(() => {
+    const textColor = interpolateColor(
+      currentScore,
+      [0, 20, 40, 60, 80, 100],
+      ['#FF0000', '#FF4500', '#FFD700', '#9ACD32', '#32CD32', '#006400'] // Example: Red to Dark Green
     );
     return {
-      stroke: strokeColor,
+      color: textColor,
     };
-  }, []); // Залежності не потрібні, оскільки worklet автоматично оновлюється при зміні shared values
+  });
 
-  // Поточний колір для ActivityIndicator (змінюється миттєво)
-  const activityIndicatorColor = getWaterQualityColor(currentScore);
+  const animatedWqiTextStyle = useAnimatedStyle(() => {
+    'worklet';
+    if (isAddMode) {
+      return {
+        color: defaultStrokeColor, // Or some other default/neutral color for add mode
+      };
+    }
+    return {
+      color: currentColorSV.value,
+    };
+  }, [isAddMode]); // Dependency: isAddMode
+  
+  // Define animated props for the inner Circle's stroke property
+  const innerCircleAnimatedProps = useAnimatedProps(() => {
+    'worklet';
+    if (isAddMode) {
+      return {
+        stroke: defaultStrokeColor,
+      };
+    }
+    return {
+      stroke: currentColorSV.value,
+    };
+  }, [isAddMode]); // Dependency: isAddMode
 
   return (
-    // <GestureDetector gesture={panGesture}> // GestureDetector removed
-      <Animated.View style={[styles.outerContainer, animatedPressStyle]}> {/* Used animatedPressStyle */}
-        {/* Візуальна частина кола */}
-        <Animated.View style={[styles.visualCircle]}>
-          <Svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}>
-            <AnimatedCircle
-              cx={circleSize / 2}
-              cy={circleSize / 2}
-              r={radius}
-              // stroke={color} // Replaced by animatedProps
-              animatedProps={animatedCircleProps}
-              strokeWidth={strokeWidth}
-              fill="transparent"
-            />
-          </Svg>
-        <TouchableOpacity
-          style={styles.touchableOverlay}
-          onPress={handleScoreUpdate}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          activeOpacity={0.7} // Можна залишити стандартну або трохи змінити
-        />
-          <View style={styles.textVisualContainer} pointerEvents="none">
-            {isLoading ? (
-              <ActivityIndicator size="large" color={activityIndicatorColor} />
-            ) : (
-              <>
-                <Text style={styles.scoreText}>{currentScore}</Text>
-                <Text style={styles.aqiText}>WQI</Text>
-              </>
-            )}
-          </View>
-        </Animated.View>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
+      <Animated.View style={[styles.container, animatedStyle, { width: size, height: size }]}>
+
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <AnimatedCircle // Changed to AnimatedCircle to use animatedProps
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeWidth={strokeWidth - (Platform.OS === 'ios' ? 1 : 2)} 
+            animatedProps={innerCircleAnimatedProps} // Use animated props for stroke color
+            strokeOpacity={0.3} 
+            fill="transparent"
+          />
+          <AnimatedCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={isAddMode ? 0 : circumference * (1 - currentScore / 100)}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            fill="transparent"
+            animatedProps={animatedCircleStrokeProps} // Use the new unified animated props
+          />
+        </Svg>
+        <View style={styles.textContainer}>
+          {isAddMode ? (
+            <Ionicons name="add" size={size * 0.4} color={defaultStrokeColor} />
+          ) : isLoading && currentScore === 0 && !error ? ( // Show loader only if score is 0 and no error
+            <ActivityIndicator size="large" color={defaultStrokeColor} />
+          ) : error ? (
+            <>
+              <Text style={[styles.errorTextSmall, { fontSize: size * 0.08 }]}>Помилка</Text>
+              <Text style={[styles.errorTextDetails, { fontSize: size * 0.06 }]}>{error.length > 50 ? error.substring(0, 47) + "..." : error}</Text>
+            </>
+          ) : (
+            <>
+              <Animated.Text style={[styles.scoreText, { fontSize: size * 0.3 }, animatedTextStyle]}>
+                {currentScore.toFixed(0)}
+              </Animated.Text>
+              <Animated.Text style={[styles.wqiText, { fontSize: size * 0.1 }, animatedWqiTextStyle]}> {/* Changed to Animated.Text and use animatedWqiTextStyle */}
+                {wqiText}
+              </Animated.Text>
+            </>
+          )}
+        </View>
       </Animated.View>
-    // </GestureDetector> // GestureDetector removed
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  outerContainer: { // Контейнер для обох шарів
-    width: circleSize,
-    height: circleSize,
-    marginVertical: 30,
-    position: 'relative', // Важливо для абсолютного позиціонування touchableOverlay
-    // backgroundColor: 'rgba(0, 0, 255, 0.2)', // Для налагодження розмірів outerContainer
-    zIndex: 100
-  },
-  visualCircle: { // Візуальна частина
-    width: '100%',
-    height: '100%',
+  container: {
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 5,
-    // backgroundColor: 'rgba(0, 255, 0, 0.2)', // Для налагодження розмірів visualCircle
-    // Тіні
+    position: 'relative',
+    // Shadow for Android
+    elevation: 10,
+    // Shadow for iOS
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5, // Для Android тіней
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
   },
-  textVisualContainer: { // Контейнер для тексту, всередині візуальної частини
+  textContainer: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 5
-  },
-  touchableOverlay: { // Шар для дотиків
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%', // Заповнює outerContainer
-    height: '100%', // Заповнює outerContainer
-    borderRadius: circleSize / 2, // Якщо ви хочете, щоб він мав круглу форму (для візуалізації з фоном)
-    zIndex: 1000
   },
   scoreText: {
-    fontSize: circleSize * 0.3,
     fontWeight: 'bold',
-    color: '#000',
-    zIndex: 5
+    fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : 'sans-serif-condensed-bold',
   },
-  aqiText: {
-    fontSize: circleSize * 0.1,
-    color: '#555',
-    marginTop: 5,
-    zIndex: 5
+  wqiText: {
+    // fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Medium' : 'sans-serif-condensed-medium',
+    marginTop: Platform.OS === 'ios' ? -5 : -10, // Adjust as needed for font
+  },
+  errorTextSmall: {
+    color: Colors.light.text, // Changed to Colors.light.text as errorText is not defined
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  errorTextDetails: {
+    color: Colors.light.text, // Changed to Colors.light.text as errorText is not defined
+    textAlign: 'center',
+    marginTop: 2,
   },
 });
 

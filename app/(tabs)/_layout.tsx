@@ -1,5 +1,4 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
 
 // Assuming Colors and useColorScheme are still relevant for potential future use or theming
 // import { Colors } from '@/constants/Colors'; 
@@ -20,7 +19,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{ 
-          // No title or icon needed if tab bar is hidden
+          title: '', // Explicitly set title to empty or undefined
+          // No icon needed if tab bar is hidden
         }}
       />
       {/* Removed explore tab as per previous setup */}

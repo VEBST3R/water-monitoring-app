@@ -11,8 +11,13 @@ interface ParameterCircleProps {
 
 const { width } = Dimensions.get('window');
 const circleDiameter = width * 0.38; // Adjusted size for 2x2 grid
-const strokeWidth = 8;
-const radius = (circleDiameter - strokeWidth) / 2;
+const parameterStrokeWidth = 10; // New stroke width for the parameter circle
+const backgroundCircleStrokeWidth = 1; // Stroke width for the background circle's border
+
+// Radius for the center of the thick foreground stroke
+const foregroundCircleRadius = (circleDiameter - parameterStrokeWidth) / 2;
+// Radius for the center of the thin background border stroke
+const backgroundCircleRadius = (circleDiameter - backgroundCircleStrokeWidth) / 2;
 
 const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, circleColor = '#007bff' }) => {
   if (value === undefined || value === null) {
@@ -20,13 +25,23 @@ const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, c
       <View style={styles.container}>
         <View style={styles.circleWrapper}>
           <Svg width={circleDiameter} height={circleDiameter} viewBox={`0 0 ${circleDiameter} ${circleDiameter}`}>
+            {/* Background Circle */}
             <SvgCircle
               cx={circleDiameter / 2}
               cy={circleDiameter / 2}
-              r={radius}
-              stroke={circleColor}
-              strokeWidth={strokeWidth}
-              fill="transparent"
+              r={backgroundCircleRadius}
+              fill="rgba(255, 255, 255, 0.2)"
+              stroke="rgba(0,0,0,0.1)"
+              strokeWidth={backgroundCircleStrokeWidth}
+            />
+            {/* Foreground Circle (Stroke Only) */}
+            <SvgCircle
+              cx={circleDiameter / 2}
+              cy={circleDiameter / 2}
+              r={foregroundCircleRadius}
+              stroke={circleColor} // Use circleColor for stroke
+              strokeWidth={parameterStrokeWidth} // Use new stroke width
+              fill="transparent" // No fill
             />
           </Svg>
           <View style={styles.textContainer} pointerEvents="none">
@@ -42,13 +57,23 @@ const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, c
     <View style={styles.container}>
       <View style={styles.circleWrapper}>
         <Svg width={circleDiameter} height={circleDiameter} viewBox={`0 0 ${circleDiameter} ${circleDiameter}`}>
+          {/* Background Circle */}
           <SvgCircle
             cx={circleDiameter / 2}
             cy={circleDiameter / 2}
-            r={radius}
-            stroke={circleColor}
-            strokeWidth={strokeWidth}
-            fill="transparent"
+            r={backgroundCircleRadius}
+            fill="rgba(255, 255, 255, 0.2)"
+            stroke="rgba(0,0,0,0.1)"
+            strokeWidth={backgroundCircleStrokeWidth}
+          />
+          {/* Foreground Circle (Stroke Only) */}
+          <SvgCircle
+            cx={circleDiameter / 2}
+            cy={circleDiameter / 2}
+            r={foregroundCircleRadius}
+            stroke={circleColor} // Use circleColor for stroke
+            strokeWidth={parameterStrokeWidth} // Use new stroke width
+            fill="transparent" // No fill
           />
         </Svg>
         <View style={styles.textContainer} pointerEvents="none">
@@ -74,12 +99,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    // Add shadows
+    // Updated shadows to match ScoreCircle
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.0, // Adjusted shadow radius
+    elevation: 8, // Adjusted elevation
   },
   textContainer: {
     position: 'absolute',
@@ -89,14 +114,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, // Prevent text from touching circle edge
   },
   labelText: {
-    fontSize: circleDiameter * 0.12,
-    color: '#333',
-    fontWeight: 'bold',
+    fontSize: circleDiameter * 0.12, // Reverted font size
+    color: '#333', // Reverted to darker color
+    fontWeight: 'bold', // Reverted font weight
     textAlign: 'center',
   },
   valueText: {
-    fontSize: circleDiameter * 0.15,
-    color: '#000',
+    fontSize: circleDiameter * 0.15, // Reverted font size
+    color: '#000', // Reverted to darker color
     fontWeight: 'bold',
     marginTop: 5,
     textAlign: 'center',
