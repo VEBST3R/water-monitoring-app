@@ -167,7 +167,7 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device }) => {
             <Ionicons name="cellular-outline" size={20} color={Colors.light.text} style={styles.icon} />
             <ThemedText type="defaultSemiBold" style={styles.label}>Сила сигналу:</ThemedText>
             <ThemedText style={styles.value}>
-              {technical?.signalStrength ? `${technical.signalStrength} dBm` : 'Невідомо'}
+              {technical?.ping ? `${technical.ping} dBm` : 'Невідомо'}
             </ThemedText>
           </View>
         </View>

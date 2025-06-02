@@ -24,7 +24,7 @@ export interface TechnicalParameters {
   sensorStatus?: string;
   lastCalibration?: string;
   batteryLevel?: number;
-  signalStrength?: number;
+  ping?: number;
   firmwareVersion?: string;
   connectionStatus?: string;
   alerts?: (string | DeviceAlert)[];

@@ -68,15 +68,16 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device }) => {
       "Калібрування датчиків", 
       "Ви впевнені, що хочете запустити калібрування всіх датчиків? Це може зайняти кілька хвилин.",
       [
-        { text: "Скасувати", style: "cancel" },
-        { 
+        { text: "Скасувати", style: "cancel" },        { 
           text: "Калібрувати", 
           onPress: async () => {
             try {
               const result = await calibrateDevice();
               
               if (result?.success) {
-                Alert.alert("Успіх", result.message || "Калібрування успішно завершено");
+                Alert.alert("Успіх", result.message || "Калібрування успішно завершено", [
+                  { text: "ОК", onPress: () => refreshData() } // Оновлюємо дані після успішного калібрування
+                ]);
               } else {
                 Alert.alert("Помилка", result?.message || "Не вдалося виконати калібрування");
               }
@@ -148,11 +149,10 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device }) => {
             <Ionicons name="information-circle-outline" size={24} color={Colors.light.tint} />
             <ThemedText type="subtitle" style={styles.cardTitle}>Основна інформація</ThemedText>
           </View>
-          
-          <View style={styles.infoSection}>
+            <View style={styles.infoSection}>
             <Ionicons name="hardware-chip-outline" size={20} color={Colors.light.text} style={styles.icon} />
             <ThemedText type="defaultSemiBold" style={styles.label}>Назва пристрою:</ThemedText>
-            <ThemedText style={styles.value}>{currentDevice?.name || currentDevice?.customName || 'Невідомий пристрій'}</ThemedText>
+            <ThemedText style={styles.value}>{device?.name || device?.customName || 'Невідомий пристрій'}</ThemedText>
           </View>
 
           <View style={styles.infoSection}>
@@ -202,12 +202,11 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device }) => {
               {technical?.batteryLevel ? `${technical.batteryLevel}%` : 'Невідомо'}
             </ThemedText>
           </View>
-          
-          <View style={styles.infoSection}>
-            <Ionicons name="cellular-outline" size={20} color={Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={styles.label}>Сила сигналу:</ThemedText>
+            <View style={styles.infoSection}>
+            <Ionicons name="pulse-outline" size={20} color={Colors.light.text} style={styles.icon} />
+            <ThemedText type="defaultSemiBold" style={styles.label}>Ping:</ThemedText>
             <ThemedText style={styles.value}>
-              {technical?.signalStrength ? `${technical.signalStrength} dBm` : 'Невідомо'}
+              {technical?.ping ? `${technical.ping} ms` : 'Невідомо'}
             </ThemedText>
           </View>
         </View>
