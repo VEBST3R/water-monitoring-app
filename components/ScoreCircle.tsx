@@ -27,7 +27,7 @@ const radius = (circleSize - strokeWidth) / 2;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const PAN_ACTIVATION_THRESHOLD = 10; // Minimum pixels to move before pan activates
-const MIN_FETCH_INTERVAL = 1000; // 1 second - Defined MIN_FETCH_INTERVAL
+const MIN_FETCH_INTERVAL = 10000; // 1 second - Defined MIN_FETCH_INTERVAL
 
 const ScoreCircle: React.FC<ScoreCircleProps> = ({ 
   initialScore = 0,
@@ -87,10 +87,9 @@ const ScoreCircle: React.FC<ScoreCircleProps> = ({
     }
     lastFetchTimeRef.current = Date.now();
     // console.log(`Fetching data for device: ${deviceId} from ${serverEndpoint}`);
-    setIsLoading(true);
-    setError(null);
+    setIsLoading(true);    setError(null);
     try {
-      const response = await fetch(`http://${serverEndpoint}/getWQI?device=${deviceId}`);
+      const response = await fetch(`http://${serverEndpoint}/api/getWQI?device=${deviceId}`);
       if (!response.ok) {
         const errorText = await response.text();
         // console.error(`HTTP error! status: ${response.status}, message: ${errorText}`);

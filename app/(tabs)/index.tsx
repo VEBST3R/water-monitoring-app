@@ -4,16 +4,18 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Extrapolate, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import DetailedParametersView from '@/components/DetailedParametersView';
+import DeviceStatusView from '@/components/DeviceStatusView';
 import ScoreCircle from '@/components/ScoreCircle';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import WaveAnimation from '@/components/WaveAnimation';
 import { Colors } from '@/constants/Colors';
+import { UserDevice } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const CENTRAL_SERVER_ENDPOINT = '192.168.0.198:1880';
+const CENTRAL_SERVER_ENDPOINT = '192.168.1.103:1880';
 const ASYNC_STORAGE_DEVICES_KEY = '@userDevices';
 const ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY = '@currentDeviceIndex';
 
@@ -25,23 +27,13 @@ const formatTime = (seconds: number) => {
   return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
 };
 
-interface ServerConfig {
-  deviceId: string;
-  serverName: string; 
-}
-
-interface UserDevice {
-  id: string; 
-  customName: string; 
-  serverConfig: ServerConfig;
-}
-
 export default function HomeScreen() {
   const [userDevices, setUserDevices] = useState<UserDevice[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
   const [score, setScore] = useState(0); 
   const [detailedParams, setDetailedParams] = useState<any>(null);
   const [showDetailedView, setShowDetailedView] = useState(false);
+  const [showDeviceStatusView, setShowDeviceStatusView] = useState(false); // New state for device status view
   const translateX = useSharedValue(0);
   const [isLoading, setIsLoading] = useState(true); 
 
@@ -127,7 +119,7 @@ export default function HomeScreen() {
 
     // Validate device ID with the server
     try {
-      const validationUrl = `http://${CENTRAL_SERVER_ENDPOINT}/getWQI?device=${trimmedDeviceId}`;
+      const validationUrl = `http://${CENTRAL_SERVER_ENDPOINT}/api/getWQI?device=${trimmedDeviceId}`;
       // console.log('Validating device ID:', validationUrl);
       const response = await fetch(validationUrl);
       // console.log('Validation response status:', response.status);
@@ -212,31 +204,47 @@ export default function HomeScreen() {
     .onUpdate((event) => {
       if (userDevices.length === 0) return;
       if (showDetailedView) {
-        // When detailed view is shown, main screen is at -screenWidth.
+        // When detailed view is shown (parameters), main screen is at -screenWidth.
         // Swiping right (positive event.translationX) should bring main screen towards 0.
         translateX.value = Math.min(0, -screenWidth + event.translationX);
+      } else if (showDeviceStatusView) {
+        // When device status view is shown, main screen is at screenWidth.
+        // Swiping left (negative event.translationX) should bring main screen towards 0.
+        translateX.value = Math.max(0, screenWidth + event.translationX);
       } else {
         // When main screen is shown, it's at 0.
-        // Swiping left (negative event.translationX) should bring main screen towards -screenWidth.
-        translateX.value = Math.max(-screenWidth, event.translationX);
+        // Swiping left (negative event.translationX) brings detailed params view.
+        // Swiping right (positive event.translationX) brings device status view.
+        translateX.value = event.translationX;
       }
     })
     .onEnd((event) => {
       if (userDevices.length === 0) return;
-      if (showDetailedView) {
-        if (event.translationX > screenWidth / 4) {
+      const { translationX } = event;
+
+      if (showDetailedView) { // Currently showing detailed parameters view (left of main)
+        if (translationX > screenWidth / 4) { // Swiped right enough to close it
           runOnJS(setShowDetailedView)(false);
           translateX.value = withTiming(0);
-        } else {
-          // Corrected: Snap back to detailed view if swipe is not enough
-          translateX.value = withTiming(-screenWidth); 
+        } else { // Not swiped enough, snap back to detailed view
+          translateX.value = withTiming(-screenWidth);
         }
-      } else {
-        if (event.translationX < -screenWidth / 4) {
+      } else if (showDeviceStatusView) { // Currently showing device status view (right of main)
+        if (translationX < -screenWidth / 4) { // Swiped left enough to close it
+          runOnJS(setShowDeviceStatusView)(false);
+          translateX.value = withTiming(0);
+        } else { // Not swiped enough, snap back to device status view
+          translateX.value = withTiming(screenWidth);
+        }
+      } else { // Currently showing main screen
+        if (translationX < -screenWidth / 4) { // Swiped left for detailed params
           runOnJS(setShowDetailedView)(true);
-          translateX.value = withTiming(-screenWidth); 
-        } else {
-          translateX.value = withTiming(0); 
+          translateX.value = withTiming(-screenWidth);
+        } else if (translationX > screenWidth / 4) { // Swiped right for device status
+          runOnJS(setShowDeviceStatusView)(true);
+          translateX.value = withTiming(screenWidth);
+        } else { // Not swiped enough, snap back to main screen
+          translateX.value = withTiming(0);
         }
       }
     });
@@ -260,13 +268,15 @@ export default function HomeScreen() {
   });
 
   const animatedDetailedViewStyle = useAnimatedStyle(() => {
+    // DetailedParametersView slides in from the right (translateX from screenWidth to 0)
+    // when main screen moves from 0 to -screenWidth.
     return {
       transform: [
         {
           translateX: interpolate(
             translateX.value,
             [-screenWidth, 0],
-            [0, screenWidth],
+            [0, screenWidth], // Detailed view is at 0 when main is at -screenWidth
             Extrapolate.CLAMP
           ),
         },
@@ -276,7 +286,30 @@ export default function HomeScreen() {
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 150, // Increased zIndex to be above the header
+      zIndex: 150, 
+    };
+  });
+
+  const animatedDeviceStatusViewStyle = useAnimatedStyle(() => {
+    // DeviceStatusView slides in from the left (translateX from -screenWidth to 0)
+    // when main screen moves from 0 to screenWidth.
+    return {
+      transform: [
+        {
+          translateX: interpolate(
+            translateX.value,
+            [0, screenWidth],
+            [-screenWidth, 0], // DeviceStatusView is at 0 when main is at screenWidth
+            Extrapolate.CLAMP
+          ),
+        },
+      ],
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 150, // Same zIndex as detailed view, or higher if it should overlap
     };
   });
 
@@ -306,7 +339,7 @@ export default function HomeScreen() {
       <>
         <View style={styles.headerLeft}>
           <ThemedText type="title" style={styles.deviceName}>{currentDevice.customName}</ThemedText>
-          <ThemedText type="defaultSemiBold" style={styles.deviceServerName}>({currentDevice.serverConfig.serverName})</ThemedText>
+          <ThemedText type="defaultSemiBold" style={styles.deviceServerName}>({currentDevice.serverConfig?.serverName || 'Невідомий сервер'})</ThemedText>
         </View>
         <View style={styles.headerRight}>
           <Ionicons
@@ -377,7 +410,7 @@ export default function HomeScreen() {
                   // onScoreUpdate={undefined}
                   // onFetchError={undefined}
                 />
-              ) : currentDevice ? (
+              ) : currentDevice && currentDevice.serverConfig ? (
                 <ScoreCircle
                   key={currentDevice.id} 
                   size={screenWidth * 0.7}
@@ -389,6 +422,11 @@ export default function HomeScreen() {
                   onFetchError={handleFetchError}
                   // isAddMode is implicitly false or can be omitted
                 />
+              ) : currentDevice ? (
+                <View style={styles.centeredMessageContainer}>
+                  <ActivityIndicator size="large" color={Colors.light.tint} />
+                  <ThemedText style={styles.loadingText}>Конфігурація пристрою неповна...</ThemedText>
+                </View>
               ) : (
                 <View style={styles.centeredMessageContainer}>
                   <ActivityIndicator size="large" color={Colors.light.tint} />
@@ -400,6 +438,12 @@ export default function HomeScreen() {
           {userDevices.length > 0 && currentDevice && (
             <Animated.View style={[styles.detailedViewContainer, animatedDetailedViewStyle]}>
               <DetailedParametersView parameters={detailedParams} />
+            </Animated.View>
+          )}
+
+          {userDevices.length > 0 && currentDevice && (
+            <Animated.View style={[styles.deviceStatusViewContainer, animatedDeviceStatusViewStyle]}> 
+              <DeviceStatusView device={currentDevice} />
             </Animated.View>
           )}
 
@@ -465,7 +509,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.light.background, 
+    // backgroundColor: Colors.light.background, // Background is now on the root View
   },
   loadingContainer: {
     flex: 1,
@@ -480,7 +524,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40, // Adjusted top padding
+    top: Platform.OS === 'ios' ? 90 : 60, // Further increased top padding for iOS
     left: 0,
     right: 0,
     paddingHorizontal: 20,
@@ -549,7 +593,18 @@ const styles = StyleSheet.create({
   detailedViewContainer: {
     width: screenWidth,
     height: screenHeight, 
-    backgroundColor: 'transparent', // Змінено на прозорий
+    backgroundColor: 'transparent', 
+  },
+  deviceStatusViewContainer: { 
+    width: screenWidth,
+    height: screenHeight,
+    backgroundColor: 'transparent', // Changed to transparent to show waves
+    // position: 'absolute', // Already applied in animated style
+    // top: 0,
+    // left: 0,
+    // right: 0,
+    // bottom: 0,
+    // zIndex: 150, // Already applied in animated style
   },
   fab: {
     position: 'absolute',

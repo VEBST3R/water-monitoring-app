@@ -1,0 +1,23 @@
+{
+  "name": "water-monitoring-node-red-server",
+  "version": "1.0.0",
+  "description": "Node-RED server для симуляції пристроїв моніторингу якості води",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "start-original": "node-red --settings settings.js --userDir .",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "node-red": "^3.1.0"
+  },
+  "keywords": [
+    "node-red",
+    "water-monitoring",
+    "iot",
+    "simulation"
+  ],
+  "author": "Water Monitoring Team",
+  "license": "MIT"
+}

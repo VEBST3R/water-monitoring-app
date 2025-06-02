@@ -1,5 +1,7 @@
+import { Colors } from '@/constants/Colors'; // Import Colors
 import React from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { Svg, Circle as SvgCircle } from 'react-native-svg';
 
 interface ParameterCircleProps {
@@ -10,38 +12,43 @@ interface ParameterCircleProps {
 }
 
 const { width } = Dimensions.get('window');
-const circleDiameter = width * 0.38; // Adjusted size for 2x2 grid
-const parameterStrokeWidth = 10; // New stroke width for the parameter circle
-const backgroundCircleStrokeWidth = 1; // Stroke width for the background circle's border
+const circleDiameter = width * 0.38; 
+// const parameterStrokeWidth = 10; // Will use strokeWidth from ScoreCircle style
+const scoreCircleStrokeWidth = 15; // Matching ScoreCircle strokeWidth
 
 // Radius for the center of the thick foreground stroke
-const foregroundCircleRadius = (circleDiameter - parameterStrokeWidth) / 2;
-// Radius for the center of the thin background border stroke
-const backgroundCircleRadius = (circleDiameter - backgroundCircleStrokeWidth) / 2;
+const foregroundCircleRadius = (circleDiameter - scoreCircleStrokeWidth) / 2;
+// Background circle with opacity, similar to ScoreCircle's inner circle
+const backgroundCircleRadius = (circleDiameter - (scoreCircleStrokeWidth - (Platform.OS === 'ios' ? 1 : 2))) / 2;
 
-const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, circleColor = '#007bff' }) => {
+
+const AnimatedSvgCircle = Animated.createAnimatedComponent(SvgCircle); // Create AnimatedComponent
+
+const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, circleColor = Colors.light.tint }) => { // Use Colors.light.tint as default
   if (value === undefined || value === null) {
     return (
       <View style={styles.container}>
         <View style={styles.circleWrapper}>
           <Svg width={circleDiameter} height={circleDiameter} viewBox={`0 0 ${circleDiameter} ${circleDiameter}`}>
-            {/* Background Circle */}
-            <SvgCircle
+            {/* Background Circle with opacity (like ScoreCircle's inner one) */}
+            <AnimatedSvgCircle
               cx={circleDiameter / 2}
               cy={circleDiameter / 2}
               r={backgroundCircleRadius}
-              fill="rgba(255, 255, 255, 0.2)"
-              stroke="rgba(0,0,0,0.1)"
-              strokeWidth={backgroundCircleStrokeWidth}
+              stroke={circleColor} 
+              strokeWidth={scoreCircleStrokeWidth - (Platform.OS === 'ios' ? 1 : 2)}
+              strokeOpacity={0.3} // Match ScoreCircle's inner circle opacity
+              fill="transparent"
             />
-            {/* Foreground Circle (Stroke Only) */}
-            <SvgCircle
+            {/* Foreground Circle (Stroke Only) - This is the main colored stroke */}
+            <AnimatedSvgCircle
               cx={circleDiameter / 2}
               cy={circleDiameter / 2}
-              r={foregroundCircleRadius}
-              stroke={circleColor} // Use circleColor for stroke
-              strokeWidth={parameterStrokeWidth} // Use new stroke width
-              fill="transparent" // No fill
+              r={foregroundCircleRadius} // Use foregroundCircleRadius
+              stroke={circleColor} 
+              strokeWidth={scoreCircleStrokeWidth} // Match ScoreCircle's main stroke width
+              fill="transparent" 
+              strokeLinecap="round" // Match ScoreCircle style
             />
           </Svg>
           <View style={styles.textContainer} pointerEvents="none">
@@ -57,23 +64,25 @@ const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, c
     <View style={styles.container}>
       <View style={styles.circleWrapper}>
         <Svg width={circleDiameter} height={circleDiameter} viewBox={`0 0 ${circleDiameter} ${circleDiameter}`}>
-          {/* Background Circle */}
-          <SvgCircle
+          {/* Background Circle with opacity */}
+          <AnimatedSvgCircle
             cx={circleDiameter / 2}
             cy={circleDiameter / 2}
             r={backgroundCircleRadius}
-            fill="rgba(255, 255, 255, 0.2)"
-            stroke="rgba(0,0,0,0.1)"
-            strokeWidth={backgroundCircleStrokeWidth}
+            stroke={circleColor}
+            strokeWidth={scoreCircleStrokeWidth - (Platform.OS === 'ios' ? 1 : 2)}
+            strokeOpacity={0.3}
+            fill="transparent"
           />
           {/* Foreground Circle (Stroke Only) */}
-          <SvgCircle
+          <AnimatedSvgCircle
             cx={circleDiameter / 2}
             cy={circleDiameter / 2}
             r={foregroundCircleRadius}
-            stroke={circleColor} // Use circleColor for stroke
-            strokeWidth={parameterStrokeWidth} // Use new stroke width
-            fill="transparent" // No fill
+            stroke={circleColor} 
+            strokeWidth={scoreCircleStrokeWidth}
+            fill="transparent"
+            strokeLinecap="round"
           />
         </Svg>
         <View style={styles.textContainer} pointerEvents="none">
@@ -87,11 +96,11 @@ const ParameterCircle: React.FC<ParameterCircleProps> = ({ label, value, unit, c
 
 const styles = StyleSheet.create({
   container: {
-    width: '50%', // Each circle takes up half the width of the parent
+    width: '50%', 
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10, // Padding around each circle container
-    backgroundColor: 'Transparent', // Transparent background for the container
+    padding: 10, 
+    backgroundColor: 'transparent', // Changed to transparent
   },
   circleWrapper: {
     width: circleDiameter,
@@ -99,12 +108,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    // Updated shadows to match ScoreCircle
+    // Matching ScoreCircle shadow styles
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.0, // Adjusted shadow radius
-    elevation: 8, // Adjusted elevation
+    shadowOffset: { width: 0, height: 2 }, // ScoreCircle uses height: 2 in some places, but 4 in others. Let's try 2 for a subtle effect or match the main one.
+    shadowOpacity: 0.25, // ScoreCircle uses 0.25 or 0.3
+    shadowRadius: 3.84, // ScoreCircle uses 3.84 or 4.0
+    elevation: 5, // ScoreCircle uses 5 or 8.
   },
   textContainer: {
     position: 'absolute',
@@ -114,14 +123,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, // Prevent text from touching circle edge
   },
   labelText: {
-    fontSize: circleDiameter * 0.12, // Reverted font size
-    color: '#333', // Reverted to darker color
-    fontWeight: 'bold', // Reverted font weight
+    fontSize: circleDiameter * 0.12, 
+    color: Colors.light.text, // Use themed color
+    fontWeight: 'bold', 
     textAlign: 'center',
   },
   valueText: {
-    fontSize: circleDiameter * 0.15, // Reverted font size
-    color: '#000', // Reverted to darker color
+    fontSize: circleDiameter * 0.15, 
+    color: Colors.light.text, // Use themed color
     fontWeight: 'bold',
     marginTop: 5,
     textAlign: 'center',
