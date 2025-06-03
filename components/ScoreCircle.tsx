@@ -5,6 +5,7 @@ import { ActivityIndicator, AppState, AppStateStatus, Dimensions, NativeEventSub
 import Animated, { Easing, interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg'; // Imported Circle
 import { getWaterQualityColor } from '../utils/colorUtils';
+import { calculateWQI } from '../utils/wqiUtils';
 import { WaterParameters } from './DetailedParametersView'; // Import WaterParameters type
 
 export interface ScoreCircleProps {
@@ -99,18 +100,23 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
           const errorText = await response.text();
           // console.error(`HTTP error! status: ${response.status}, message: ${errorText}`);
           throw new Error(`Помилка сервера: ${response.status} - ${errorText || 'Невідома помилка'}`);
-        }
-        const data = await response.json();
+        }        const data = await response.json();
         // console.log("Data fetched:", data);
 
-        if (data && typeof data.wqi === 'number' && data.parameters) {
-          const newScore = Math.max(0, Math.min(100, Math.round(data.wqi)));
+        if (data && data.parameters) {          // Calculate WQI locally if server didn't provide it or to ensure consistency
+          const localWQI = calculateWQI(data.parameters);
+          const serverWQI = typeof data.wqi === 'number' && data.wqi > 0 ? data.wqi : 0;
+          
+          // Use the server WQI if available, otherwise use the locally calculated one
+          const newScore = Math.max(0, Math.min(100, Math.round(serverWQI || localWQI)));
+          
           setCurrentScore(newScore);
           setWqiText('WQI');
           colorAnimation.value = 0;
           colorAnimation.value = withTiming(1, { duration: 500 });
           previousColorSV.value = currentColorSV.value;
           currentColorSV.value = getWaterQualityColor(newScore);
+          setDetailedParameters(data.parameters);
           if (onScoreUpdate) {
             runOnJS(onScoreUpdate)(newScore, data.parameters);
           }

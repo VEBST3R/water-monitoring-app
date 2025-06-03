@@ -98,6 +98,12 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
 
   // Додаткова інформація про параметр
   const getParameterInfo = () => {
+    if (parameterKey === 'wqi') {
+      return {
+        info: 'WQI (Water Quality Index) — інтегральний індекс якості води, розрахований на основі основних параметрів. 80-100 — відмінна якість, 60-79 — хороша, 40-59 — прийнятна, 20-39 — погана, 0-19 — дуже погана.',
+        risks: { low: '', high: '' }
+      };
+    }
     switch (parameterKey) {
       case 'pH':
         return {
@@ -140,6 +146,13 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
   };
 
   const paramInfo = getParameterInfo();
+
+  // Форматування значення для WQI (без одиниць)
+  const formatValue = (val: number) => {
+    if (parameterKey === 'wqi') return Math.round(val).toString();
+    if (parameterKey === 'pH') return val.toFixed(1);
+    return val.toFixed(1);
+  };
 
   return (
     <Modal
@@ -262,9 +275,9 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
           </ThemedText>
           <ThemedText style={[styles.currentValue, { color }]}>
             {selectedData ? 
-              selectedData.value.toFixed(parameterKey === 'pH' ? 1 : 1) :
-              data[data.length - 1]?.value.toFixed(parameterKey === 'pH' ? 1 : 1)
-            }{unit}
+              formatValue(selectedData.value) :
+              formatValue(data[data.length - 1]?.value)
+            }{parameterKey !== 'wqi' ? unit : ''}
           </ThemedText>
         </View>
 
@@ -273,19 +286,19 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
           <View style={styles.statItem}>
             <ThemedText style={styles.statLabel}>Максимум</ThemedText>
             <ThemedText style={[styles.statValue, { color }]}>
-              {maxValue.toFixed(1)}{unit}
+              {formatValue(maxValue)}{parameterKey !== 'wqi' ? unit : ''}
             </ThemedText>
           </View>
           <View style={styles.statItem}>
             <ThemedText style={styles.statLabel}>Мінімум</ThemedText>
             <ThemedText style={[styles.statValue, { color }]}>
-              {minValue.toFixed(1)}{unit}
+              {formatValue(minValue)}{parameterKey !== 'wqi' ? unit : ''}
             </ThemedText>
           </View>
           <View style={styles.statItem}>
             <ThemedText style={styles.statLabel}>Середнє</ThemedText>
             <ThemedText style={[styles.statValue, { color }]}>
-              {(values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)}{unit}
+              {formatValue(values.reduce((a, b) => a + b, 0) / values.length)}{parameterKey !== 'wqi' ? unit : ''}
             </ThemedText>
           </View>
         </View>
@@ -299,7 +312,9 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
           <ThemedText style={styles.infoText}>{paramInfo.info}</ThemedText>
           <View style={styles.optimalRange}>
             <Ionicons name="checkmark-circle-outline" size={16} color={Colors.light.tint} />
-            <ThemedText style={styles.optimalText}>Оптимальний діапазон: {optimalRange}</ThemedText>
+            <ThemedText style={styles.optimalText}>
+              {parameterKey === 'wqi' ? '80-100 (відмінна якість)' : `Оптимальний діапазон: ${optimalRange}`}
+            </ThemedText>
           </View>
         </View>
       </View>

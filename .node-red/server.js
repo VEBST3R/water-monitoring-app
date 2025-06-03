@@ -98,10 +98,36 @@ function addHistoryPoint(deviceId, params) {
 // Middleware для обробки JSON
 app.use(express.json());
 
+// Функція для розрахунку WQI (копія з flows.json)
+function calculateWQI(params) {
+    let totalWQI = 0;
+    // pH Score
+    if (params.pH >= 7.0 && params.pH <= 7.6) totalWQI += 25;
+    else if (params.pH >= 6.5 && params.pH <= 8.5) totalWQI += 18;
+    else if (params.pH >= 6.0 && params.pH <= 9.0) totalWQI += 10;
+    else totalWQI += 5;
+    // Temperature Score
+    if (params.temperature >= 18 && params.temperature <= 22) totalWQI += 25;
+    else if (params.temperature >= 15 && params.temperature <= 25) totalWQI += 18;
+    else if (params.temperature >= 10 && params.temperature <= 30) totalWQI += 10;
+    else totalWQI += 5;
+    // TDS Score
+    if (params.tds <= 300) totalWQI += 25;
+    else if (params.tds <= 500) totalWQI += 18;
+    else if (params.tds <= 800) totalWQI += 10;
+    else totalWQI += 5;
+    // Turbidity Score
+    if (params.turbidity <= 1) totalWQI += 25;
+    else if (params.turbidity <= 5) totalWQI += 18;
+    else if (params.turbidity <= 10) totalWQI += 10;
+    else totalWQI += 5;
+    return Math.max(0, Math.min(100, totalWQI));
+}
+
 // Новий endpoint для отримання історичних даних
 app.get(settings.httpNodeRoot + '/getParameterHistory', (req, res) => {
     const deviceId = req.query.device;
-    const parameter = req.query.parameter; // pH, temperature, tds, turbidity
+    const parameter = req.query.parameter; // pH, temperature, tds, turbidity, wqi
     const hoursBack = parseInt(req.query.hours) || 24; // За замовчуванням 24 години
     
     res.setHeader('Content-Type', 'application/json');
@@ -115,12 +141,8 @@ app.get(settings.httpNodeRoot + '/getParameterHistory', (req, res) => {
     }
       // Якщо історії ще немає, створюємо базову
     if (!historicalData.has(deviceId)) {
-        // Використовуємо дефолтні параметри для генерації історії
         let currentParams = { pH: 7.2, temperature: 20, tds: 300, turbidity: 1.5 };
-        
-        // Спробуємо отримати реальні дані з контексту Node-RED, якщо доступні
         try {
-            // Перевіряємо, чи Node-RED готовий
             if (RED && RED.settings && RED.settings.get) {
                 const globalContext = RED.settings.get('context');
                 if (globalContext && globalContext.default) {
@@ -134,23 +156,31 @@ app.get(settings.httpNodeRoot + '/getParameterHistory', (req, res) => {
         } catch (e) {
             console.log('Використовуємо дефолтні параметри для генерації історії');
         }
-        
         historicalData.set(deviceId, generateInitialHistory(deviceId, currentParams));
     }
-    
     const history = historicalData.get(deviceId);
     const cutoffTime = Date.now() - (hoursBack * 60 * 60 * 1000);
-    
-    // Фільтруємо дані за часом
     let filteredHistory = history.filter(point => point.timestamp >= cutoffTime);
-    
+    // --- Додаємо спеціальну обробку для WQI ---
+    if (parameter && parameter.toLowerCase() === 'wqi') {
+        const wqiHistory = filteredHistory.map(point => ({
+            timestamp: point.timestamp,
+            value: calculateWQI(point)
+        }));
+        return res.json({
+            deviceId,
+            parameter: 'wqi',
+            hoursBack,
+            data: wqiHistory,
+            count: wqiHistory.length
+        });
+    }
     // Якщо запитано конкретний параметр, повертаємо тільки його
     if (parameter && ['pH', 'temperature', 'tds', 'turbidity'].includes(parameter)) {
         filteredHistory = filteredHistory.map(point => ({
             timestamp: point.timestamp,
             value: point[parameter]
         }));
-        
         return res.json({
             deviceId,
             parameter,
@@ -159,7 +189,6 @@ app.get(settings.httpNodeRoot + '/getParameterHistory', (req, res) => {
             count: filteredHistory.length
         });
     }
-    
     // Повертаємо всі параметри
     res.json({
         deviceId,

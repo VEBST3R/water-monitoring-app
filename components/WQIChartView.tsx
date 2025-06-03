@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/Colors';
 import { getWaterQualityColor } from '@/utils/colorUtils';
+import { calculateWQI } from '@/utils/wqiUtils';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, View } from 'react-native';
@@ -13,6 +14,13 @@ interface WQIDataPoint {
   timestamp: string;
   wqi: number;
   date: Date;
+}
+
+interface WaterParameters {
+  pH: number;
+  temperature: number;
+  tds: number; // Total Dissolved Solids in mg/L
+  turbidity: number; // in NTU (Nephelometric Turbidity Units)
 }
 
 interface WQIChartViewProps {
@@ -46,25 +54,98 @@ const WQIChartView: React.FC<WQIChartViewProps> = ({ deviceId }) => {
     
     return data;
   };
-
   useEffect(() => {
-    // В реальному додатку тут буде запит до API
+    // Завантажуємо реальні дані з API
     const loadWQIData = async () => {
       try {
         setIsLoading(true);
         setError(null);
         
-        // Симулюємо завантаження
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Отримуємо історичні дані WQI з сервера
+        const response = await fetch(
+          `http://192.168.1.104:1880/api/getParameterHistory?device=${deviceId}&parameter=wqi&hours=8`
+        );
         
-        const data = generateTestData();
-        setWqiData(data);
-        
-        if (data.length > 0) {
-          setCurrentWQI(data[data.length - 1].wqi);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        const historyData = await response.json();
+          // Отримуємо поточний WQI та параметри
+        const currentResponse = await fetch(`http://192.168.1.104:1880/api/getWQI?device=${deviceId}`);
+        let currentWQI = 0;
+        let currentParams = null;
+        
+        if (currentResponse.ok) {
+          const currentData = await currentResponse.json();
+          // Використовуємо WQI від сервера
+          currentWQI = currentData.wqi || 0;
+          currentParams = currentData.parameters;
+          
+          // Якщо WQI від сервера відсутній, але є параметри, обчислюємо його локально
+          if ((!currentWQI || currentWQI === 0) && currentParams) {
+            currentWQI = calculateWQI({
+              pH: currentParams.pH || 7,
+              temperature: currentParams.temperature || 20,
+              tds: currentParams.tds || 300,
+              turbidity: currentParams.turbidity || 1
+            });
+          }
+        }
+        
+        // Конвертуємо дані в формат для діаграми
+        const wqiDataPoints: WQIDataPoint[] = [];
+        
+        if (historyData.data && Array.isArray(historyData.data)) {          historyData.data.forEach((point: any) => {
+            if (point.timestamp) {
+              // Check if we have a server-calculated WQI
+              const serverWQI = typeof point.value === 'number' ? point.value : 0;
+              
+              // Calculate local WQI if we have any parameters
+              let localWQI = 0;
+              if (point.pH || point.temperature || point.tds || point.turbidity) {
+                localWQI = calculateWQI({
+                  pH: point.pH || 7,
+                  temperature: point.temperature || 20,
+                  tds: point.tds || 300,
+                  turbidity: point.turbidity || 1
+                });
+              }
+              
+              // Use server WQI if available, otherwise use locally calculated WQI
+              const finalWQI = serverWQI || localWQI;
+              
+              wqiDataPoints.push({
+                timestamp: new Date(point.timestamp).toISOString(),
+                wqi: Math.round(finalWQI),
+                date: new Date(point.timestamp)
+              });
+            }
+          });
+        }
+        
+        // Якщо немає історичних даних, створюємо точку з поточним WQI
+        if (wqiDataPoints.length === 0) {
+          wqiDataPoints.push({
+            timestamp: new Date().toISOString(),
+            wqi: Math.round(currentWQI),
+            date: new Date()
+          });
+        }
+        
+        setWqiData(wqiDataPoints);
+        setCurrentWQI(Math.round(currentWQI));
+        
       } catch (err) {
+        console.error('Error loading WQI data:', err);
         setError('Помилка завантаження даних діаграми');
+        
+        // Fallback to test data in case of error
+        const fallbackData = generateTestData();
+        setWqiData(fallbackData);
+        if (fallbackData.length > 0) {
+          setCurrentWQI(fallbackData[fallbackData.length - 1].wqi);
+        }
       } finally {
         setIsLoading(false);
       }

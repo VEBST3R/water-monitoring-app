@@ -14,6 +14,7 @@ import WQIChartView from '@/components/WQIChartView';
 import { Colors } from '@/constants/Colors';
 import { UserDevice } from '@/types';
 import { getWaterQualityColor } from '@/utils/colorUtils';
+import { calculateWQI } from '@/utils/wqiUtils';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -64,8 +65,7 @@ export default function HomeScreen() {
     setConnectionStatus('connected');
     setLastUpdateTimestamp(Date.now());
   }, []);
-  
-  // Оновлена функція оновлення даних - Moved up before it's used
+    // Оновлена функція оновлення даних - Moved up before it's used
   const updateCurrentDeviceData = useCallback(() => {
     if (currentDevice?.serverConfig?.deviceId && connectionStatus !== 'error') {
       // Напряму робимо запит до API для отримання даних
@@ -76,9 +76,14 @@ export default function HomeScreen() {
           }
           return response.json();
         })
-        .then(data => {
-          if (data && typeof data.wqi === 'number' && data.parameters) {
-            const newScore = Math.max(0, Math.min(100, Math.round(data.wqi)));
+        .then(data => {          if (data && data.parameters) {
+            // Calculate WQI locally if server didn't provide it or to ensure consistency
+            const localWQI = calculateWQI(data.parameters);
+            const serverWQI = typeof data.wqi === 'number' && data.wqi > 0 ? data.wqi : 0;
+            
+            // Use the server WQI if available, otherwise use the locally calculated one
+            const newScore = Math.max(0, Math.min(100, Math.round(serverWQI || localWQI)));
+            
             setScore(newScore);
             setDetailedParams(data.parameters);
             setConnectionStatus('connected');
