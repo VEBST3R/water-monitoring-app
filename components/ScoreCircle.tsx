@@ -1,9 +1,9 @@
-import { Colors } from '@/constants/Colors';
-import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/constants/Colors'; // Import Colors for default tint
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, Dimensions, NativeEventSubscription, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
-import Animated, { Easing, interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
-import { Circle, Svg } from 'react-native-svg';
+import { ActivityIndicator, AppState, AppStateStatus, Dimensions, NativeEventSubscription, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native'; // Added NativeEventSubscription
+import Animated, { Easing, interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { Circle, Svg } from 'react-native-svg'; // Imported Circle
 import { getWaterQualityColor } from '../utils/colorUtils';
 import { WaterParameters } from './DetailedParametersView'; // Import WaterParameters type
 
@@ -54,10 +54,7 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
     const [isLoading, setIsLoading] = useState(!isAddMode); // Only load if not in add mode
     const [error, setError] = useState<string | null>(null);
     const [detailedParameters, setDetailedParameters] = useState<WaterParameters | null>(null); // Reinstated: This state is used in fetchDataAndUpdateState
-    const [isAnimating, setIsAnimating] = useState(false); // Додаємо стан для відстеження анімації
 
-    // Анімоване значення для плавної зміни заповнення кола
-    const animatedScoreValue = useSharedValue(initialScore);
     const previousColorSV = useSharedValue(getWaterQualityColor(initialScore));
     const currentColorSV = useSharedValue(getWaterQualityColor(initialScore));
     const colorAnimation = useSharedValue(0); 
@@ -66,18 +63,7 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
     const updateIntervalRef = useRef<number | null>(null);
     const lastFetchTimeRef = useRef<number>(0);
 
-    // Переносимо розрахунок circumference на початок функції
-    const circumference = 2 * Math.PI * radius;
-
     const defaultStrokeColor = Colors.light.tint; // Defined here
-
-    // Створюємо анімований проп для strokeDashoffset
-    const animatedCircleProps = useAnimatedProps(() => {
-      const strokeDashoffset = circumference * (1 - animatedScoreValue.value / 100);
-      return {
-        strokeDashoffset: strokeDashoffset,
-      };
-    });
 
     // Define animated props for the circle's stroke property
     const animatedCircleStrokeProps = useAnimatedProps(() => {
@@ -92,21 +78,6 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
         };
       }
     }, [isAddMode]); // Recreate worklet if isAddMode changes
-
-    // Виправляємо анімовані пропси для кола прогресу
-    const animatedProgressProps = useAnimatedProps(() => {
-      'worklet';
-      // Виправляємо розрахунок прогресу
-      // Ми хочемо, щоб коло було заповнене точно на animatedScoreValue.value відсотків
-      const progress = isAddMode ? 0 : animatedScoreValue.value / 100;
-      
-      return {
-        stroke: isAddMode ? defaultStrokeColor : currentColorSV.value,
-        // Правильна формула для strokeDashoffset: коли progress=0, dashoffset=circumference (порожнє коло)
-        // Коли progress=1 (100%), dashoffset=0 (повне коло)
-        strokeDashoffset: circumference * (1 - progress),
-      };
-    }, [isAddMode, circumference]); // Прибираємо залежності, які спричиняють проблему
 
     // Define fetchDataAndUpdateState before fetchDataRef
     const fetchDataAndUpdateState = useCallback(async (isInitialFetch = false) => {
@@ -137,31 +108,14 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
 
         if (data && typeof data.wqi === 'number' && data.parameters) {
           const newScore = Math.max(0, Math.min(100, Math.round(data.wqi)));
-          
-          // Оновлюємо стан React (currentScore) перед запуском анімації
-          // Це допоможе useEffect мати актуальне значення currentScore, коли анімація завершиться
           setCurrentScore(newScore);
-          
-          // Запускаємо анімацію від поточного значення до нового
-          if (!isInitialFetch) {
-            // oldScore тут передається для контексту, але сама логіка анімації 
-            // animateScoreChange вже не використовує його для визначення початкової точки анімації до 0.
-            // Передаємо newScore як цільове значення для анімації.
-            animateScoreChange(newScore); 
-          } else {
-            // Якщо це перше завантаження, просто встановлюємо значення без анімації
-            animatedScoreValue.value = newScore;
-            displayedScoreValue.value = newScore; 
-          }
-          
           setWqiText('WQI');
           colorAnimation.value = 0;
           colorAnimation.value = withTiming(1, { duration: 500 });
           previousColorSV.value = currentColorSV.value;
           currentColorSV.value = getWaterQualityColor(newScore);
-          
           if (onScoreUpdate) {
-            onScoreUpdate(newScore, data.parameters);
+            runOnJS(onScoreUpdate)(newScore, data.parameters);
           }
         } else {
           // console.error("Invalid data structure received:", data);
@@ -171,19 +125,21 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
         // console.error("Failed to fetch WQI data:", e);
         setError(e.message || 'Не вдалося завантажити дані. Перевірте з\'єднання.');
         if (onFetchError) {
-          // runOnJS(onFetchError)(e.message);
+          // runOnJS(onFetchError)(e); // Changed to pass e.message
           runOnJS(onFetchError)(e.message || 'Unknown fetch error');
         }
       } finally {
         setIsLoading(false);
       }
-    }, [serverEndpoint, deviceId, previousColorSV, currentColorSV, colorAnimation, onScoreUpdate, onFetchError, isAddMode, onAddButtonPress, currentScore]); // currentScore залишається в залежностях, оскільки використовується для порівняння oldScore
+    }, [serverEndpoint, deviceId, /*currentScore,*/ previousColorSV, currentColorSV, colorAnimation, onScoreUpdate, onFetchError, isAddMode, onAddButtonPress]); // Removed currentScore from deps as it causes re-creation too often, added onAddButtonPress
 
     const fetchDataRef = useRef(fetchDataAndUpdateState);
 
     useEffect(() => {
       fetchDataRef.current = fetchDataAndUpdateState;
     }, [fetchDataAndUpdateState]);
+
+    const circumference = 2 * Math.PI * radius;
 
     // useEffect for AppState listener - REMOVING LOGS
     useEffect(() => {
@@ -263,90 +219,26 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
       );
     };
 
-    // Додамо анімацію масштабування для кола при оновленні
-    const circleScale = useSharedValue(1);
-    
-    // Анімований стиль для масштабування кола
-    const animatedCircleScale = useAnimatedStyle(() => {
-      return {
-        transform: [{ scale: circleScale.value }],
-      };
-    });
-
-    // Додаємо окреме анімоване значення для відображення числа
-    const displayedScoreValue = useSharedValue(initialScore);
-
-    // Оновлена функція для анімації скидання та наповнення. Параметр oldScore видалено, оскільки він не використовувався.
-    const animateScoreChange = (newScore: number, skipDebounce: boolean = false) => {
-      // Завжди дозволяємо анімацію при skipDebounce=true
-      if (isAnimating && !skipDebounce) return;
-      
-      // Встановлюємо стан анімації
-      setIsAnimating(true);
-
-      // Додаємо анімацію масштабування - ефект пульсації
-      circleScale.value = withSequence(
-        withTiming(1.05, { duration: 300, easing: Easing.out(Easing.quad) }),
-        withTiming(0.95, { duration: 200 }),
-        withTiming(1, { duration: 200 })
-      );
-      
-      // Анімуємо число до 0 разом із колом
-      displayedScoreValue.value = withTiming(0, {
-        duration: 600, // Тривалість падіння до 0
-        easing: Easing.out(Easing.cubic),
-      });
-      
-      // Анімуємо прогрес кола до 0
-      animatedScoreValue.value = withTiming(0, {
-        duration: 600, // Тривалість падіння до 0
-        easing: Easing.out(Easing.cubic),
-      });
-      
-      // Після паузи анімуємо до цільового значення (і число, і коло)
-      displayedScoreValue.value = withDelay(650, withTiming(newScore, { // 600мс падіння + 50мс затримка
-        duration: 800, // Тривалість підйому
-        easing: Easing.out(Easing.cubic), // Змінено на більш плавний easing
-      }));
-      
-      animatedScoreValue.value = withDelay(650, withTiming(newScore, { // 600мс падіння + 50мс затримка
-        duration: 800, // Тривалість підйому
-        easing: Easing.out(Easing.cubic), // Змінено на більш плавний easing
-      }, (finished) => {
-        if (finished) {
-          runOnJS(setIsAnimating)(false);
-        }
-      }));
-    };
-
-    // Гарантуємо, що handlePress завжди запускає помітну анімацію
+    // Оновлена функція обробки натискання
     const handlePress = () => {
-      // Масштабування всієї кнопки
+      // Запускаємо анімацію масштабування
       animatePress();
 
+      // Якщо режим додавання, викликаємо відповідний обробник
       if (isAddMode && onAddButtonPress) {
         onAddButtonPress();
         return;
       }
 
-      if (!isAddMode) {
-        // Гарантуємо запуск анімації навіть для зовнішнього обробника
-        if (onPress) {
-          // Явно запускаємо анімацію відразу: скидання до 0 і наповнення до поточного значення
-          // displayedScoreValue.value використовується як початкова точка для анімації до 0
-          animateScoreChange(currentScore > 0 ? currentScore : 50, true);
-          // І тільки потім викликаємо обробник
-          setTimeout(() => onPress(), 50);
-          return;
-        }
-        
-        if (serverEndpoint && deviceId) {
-          // Явно запускаємо анімацію відразу: скидання до 0 і наповнення до поточного значення (або 50, якщо поточне 0)
-          // displayedScoreValue.value використовується як початкова точка для анімації до 0
-          animateScoreChange(currentScore > 0 ? currentScore : 50, true);
-          // Запит на сервер після невеликої затримки
-          setTimeout(() => fetchDataAndUpdateState(), 50);
-        }
+      // Якщо є зовнішній обробник натискання, викликаємо його
+      if (onPress) {
+        onPress();
+        return;
+      }
+      
+      // Після цього виконуємо стандартну логіку оновлення даних
+      if (!isAddMode && serverEndpoint && deviceId) {
+        fetchDataAndUpdateState();
       }
     };
     
@@ -358,7 +250,7 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
 
     const animatedTextStyle = useAnimatedStyle(() => {
       const textColor = interpolateColor(
-        animatedScoreValue.value, // Використовуємо анімоване значення для плавності кольору
+        currentScore,
         [0, 20, 40, 60, 80, 100],
         ['#FF0000', '#FF4500', '#FFD700', '#9ACD32', '#32CD32', '#006400'] // Example: Red to Dark Green
       );
@@ -392,54 +284,38 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
       };
     }, [isAddMode]); // Dependency: isAddMode
 
-    // Модифікуємо useEffect для синхронізації обох анімованих значень 
-    useEffect(() => {
-      // Важливо: якщо ми не в процесі анімації, треба оновити animatedScoreValue
-      if (!isAnimating) {
-        // Оновлюємо обидва анімовані значення
-        // Використовуємо коротшу, лінійну анімацію для швидкої синхронізації,
-        // якщо значення розійшлися, або миттєве оновлення, якщо вони вже рівні.
-        animatedScoreValue.value = withTiming(currentScore, { duration: 150, easing: Easing.linear });
-        displayedScoreValue.value = withTiming(currentScore, { duration: 150, easing: Easing.linear });
-      }
-    }, [currentScore, isAnimating]); // Залежності залишаємо ті ж самі
-    
     return (
       <TouchableOpacity 
         ref={ref}
         onPress={handlePress} 
         activeOpacity={0.8}
-        id={id}
+        id={id} // Додаємо id до TouchableOpacity для ідентифікації
       >
         <Animated.View style={[styles.container, animatedStyle, animatedScaleStyle, { width: size, height: size }]}>
-          <Animated.View style={[{ width: size, height: size }, animatedCircleScale]}>
-            <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-              {/* Фонове коло */}
-              <AnimatedCircle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                strokeWidth={strokeWidth - (Platform.OS === 'ios' ? 1 : 2)} 
-                animatedProps={innerCircleAnimatedProps}
-                strokeOpacity={0.2} // Збільшуємо прозорість для кращого контрасту
-                fill="transparent"
-              />
-              
-              {/* Прогрес-коло - використовуємо лише animatedProgressProps */}
-              <AnimatedCircle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                strokeWidth={strokeWidth}
-                strokeDasharray={circumference}
-                strokeLinecap="round"
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-                fill="transparent"
-                animatedProps={animatedProgressProps}
-              />
-            </Svg>
-          </Animated.View>
-          
+
+          <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <AnimatedCircle // Changed to AnimatedCircle to use animatedProps
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              strokeWidth={strokeWidth - (Platform.OS === 'ios' ? 1 : 2)} 
+              animatedProps={innerCircleAnimatedProps} // Use animated props for stroke color
+              strokeOpacity={0.3} 
+              fill="transparent"
+            />
+            <AnimatedCircle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference}
+              strokeDashoffset={isAddMode ? 0 : circumference * (1 - currentScore / 100)}
+              strokeLinecap="round"
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              fill="transparent"
+              animatedProps={animatedCircleStrokeProps} // Use the new unified animated props
+            />
+          </Svg>
           <View style={styles.textContainer}>
             {isAddMode ? (
               <Ionicons name="add" size={size * 0.4} color={defaultStrokeColor} />
@@ -452,13 +328,10 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
               </>
             ) : (
               <>
-                <Animated.Text 
-                  style={[styles.scoreText, { fontSize: size * 0.3 }, animatedTextStyle]}
-                  // Повертаємо відображення тексту як дочірнього елемента
-                >
-                  {Math.round(displayedScoreValue.value)}
+                <Animated.Text style={[styles.scoreText, { fontSize: size * 0.3 }, animatedTextStyle]}>
+                  {currentScore.toFixed(0)}
                 </Animated.Text>
-                <Animated.Text style={[styles.wqiText, { fontSize: size * 0.1 }, animatedWqiTextStyle]}>
+                <Animated.Text style={[styles.wqiText, { fontSize: size * 0.1 }, animatedWqiTextStyle]}> {/* Changed to Animated.Text and use animatedWqiTextStyle */}
                   {wqiText}
                 </Animated.Text>
               </>

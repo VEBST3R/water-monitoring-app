@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const CENTRAL_SERVER_ENDPOINT = '192.168.1.103:1880';
+const CENTRAL_SERVER_ENDPOINT = '192.168.1.104:1880';
 const ASYNC_STORAGE_DEVICES_KEY = '@userDevices';
 const ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY = '@currentDeviceIndex';
 
@@ -661,7 +661,11 @@ export default function HomeScreen() {
 
           {userDevices.length > 0 && currentDevice && (
             <Animated.View style={[styles.detailedViewContainer, animatedDetailedViewStyle]}>
-              <DetailedParametersView parameters={detailedParams} />
+              <DetailedParametersView 
+                parameters={detailedParams} 
+                onRefresh={updateCurrentDeviceData}
+                deviceId={currentDevice?.serverConfig?.deviceId || '111001'}
+              />
             </Animated.View>
           )}
 
