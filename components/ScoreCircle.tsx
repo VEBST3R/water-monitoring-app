@@ -24,9 +24,6 @@ export interface ScoreCircleProps {
 }
 
 const { width } = Dimensions.get('window');
-const circleSize = width * 0.6;
-const strokeWidth = 15;
-const radius = (circleSize - strokeWidth) / 2;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const PAN_ACTIVATION_THRESHOLD = 10; // Minimum pixels to move before pan activates
@@ -132,14 +129,16 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
         setIsLoading(false);
       }
     }, [serverEndpoint, deviceId, /*currentScore,*/ previousColorSV, currentColorSV, colorAnimation, onScoreUpdate, onFetchError, isAddMode, onAddButtonPress]); // Removed currentScore from deps as it causes re-creation too often, added onAddButtonPress
-
+    
     const fetchDataRef = useRef(fetchDataAndUpdateState);
 
     useEffect(() => {
       fetchDataRef.current = fetchDataAndUpdateState;
     }, [fetchDataAndUpdateState]);
 
-    const circumference = 2 * Math.PI * radius;
+    // Використовуємо радіус з пропсів, а не з глобальних констант
+    const actualRadius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * actualRadius;
 
     // useEffect for AppState listener - REMOVING LOGS
     useEffect(() => {
@@ -291,13 +290,11 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
         activeOpacity={0.8}
         id={id} // Додаємо id до TouchableOpacity для ідентифікації
       >
-        <Animated.View style={[styles.container, animatedStyle, animatedScaleStyle, { width: size, height: size }]}>
-
-          <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Animated.View style={[styles.container, animatedStyle, animatedScaleStyle, { width: size, height: size }]}>          <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <AnimatedCircle // Changed to AnimatedCircle to use animatedProps
               cx={size / 2}
               cy={size / 2}
-              r={radius}
+              r={actualRadius}
               strokeWidth={strokeWidth - (Platform.OS === 'ios' ? 1 : 2)} 
               animatedProps={innerCircleAnimatedProps} // Use animated props for stroke color
               strokeOpacity={0.3} 
@@ -306,7 +303,7 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
             <AnimatedCircle
               cx={size / 2}
               cy={size / 2}
-              r={radius}
+              r={actualRadius}
               strokeWidth={strokeWidth}
               strokeDasharray={circumference}
               strokeDashoffset={isAddMode ? 0 : circumference * (1 - currentScore / 100)}

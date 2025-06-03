@@ -10,8 +10,10 @@ import ScoreCircle from '@/components/ScoreCircle';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import WaveAnimation from '@/components/WaveAnimation';
+import WQIChartView from '@/components/WQIChartView';
 import { Colors } from '@/constants/Colors';
 import { UserDevice } from '@/types';
+import { getWaterQualityColor } from '@/utils/colorUtils';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -38,10 +40,10 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true); 
   const [isAddDeviceModalVisible, setAddDeviceModalVisible] = useState(false);
   const [newUserDeviceName, setNewUserDeviceName] = useState('');
-  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
+  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [nextUpdateTimer, setNextUpdateTimer] = useState(0);
+  const [showWQIChart, setShowWQIChart] = useState(false);
   
   // Shared values for animations
   const translateX = useSharedValue(0);
@@ -511,61 +513,178 @@ export default function HomeScreen() {
         <ThemedText style={styles.loadingText}>Завантаження пристроїв...</ThemedText> 
       </ThemedView>
     );
-  }
-
-  const renderHeaderContent = () => { // Renamed from renderHeader
+  }  const renderInfoCards = () => {
     if (!currentDevice && userDevices.length === 0) {
-        return (
-            <ThemedText type="subtitle" style={styles.headerPlaceholderText}>Моніторинг якості води</ThemedText>
-        );
-    }
-    if (!currentDevice && userDevices.length > 0 && !isLoading) {
-        return (
-            <ThemedText type="subtitle" style={styles.headerPlaceholderText}>Виберіть пристрій</ThemedText>
-        );
-    }
-    if (!currentDevice) return null;
-
-    return (
-      <>
-        <View style={styles.headerLeft}>
-          <ThemedText type="title" style={styles.deviceName}>{currentDevice.customName}</ThemedText>
-          <ThemedText type="defaultSemiBold" style={styles.deviceServerName}>({currentDevice.serverConfig?.serverName || 'Невідомий сервер'})</ThemedText>
-        </View>
-        <View style={styles.headerRight}>
-          <Ionicons
-            name={
-              connectionStatus === 'connected' ? 'wifi' :
-              connectionStatus === 'error' ? 'cloud-offline-outline' :
-              'cloud-outline'
-            }
-            size={24} // Increased icon size
-            color={
-              connectionStatus === 'connected' ? Colors.light.success :
-              connectionStatus === 'error' ? Colors.light.error :
-              Colors.light.text // Default color for disconnected
-            }
-            style={styles.connectionIcon}
-          />
-          <View style={styles.statusTextContainer}>
-            {connectionStatus === 'connected' && lastUpdateTimestamp && (
-            <ThemedText type="default" style={styles.nextUpdateText}>
-                Оновл: {formatTime(nextUpdateTimer)}
-              </ThemedText>
-            )}
-            {connectionStatus === 'error' && (
-              <ThemedText type="default" style={[styles.statusText, styles.errorStatusText]}>
-                Помилка
-              </ThemedText>
-            )}
-            {connectionStatus === 'disconnected' && (
-              <ThemedText type="default" style={styles.statusText}>
-                Не підключено
-              </ThemedText>
-            )}
+      return (
+        <View style={styles.infoCard}>
+          <Ionicons name="water-outline" size={24} color={Colors.light.tint} />
+          <View style={styles.cardTextContainer}>
+            <ThemedText style={styles.cardTitle}>Моніторинг якості води</ThemedText>
+            <ThemedText style={styles.cardSubtitle}>Додайте перший пристрій для початку</ThemedText>
           </View>
         </View>
-      </>
+      );
+    }
+    
+    if (!currentDevice && userDevices.length > 0 && !isLoading) {
+      return (
+        <View style={styles.infoCard}>
+          <Ionicons name="warning-outline" size={24} color={Colors.light.tabIconDefault} />
+          <View style={styles.cardTextContainer}>
+            <ThemedText style={styles.cardTitle}>Виберіть пристрій</ThemedText>
+            <ThemedText style={styles.cardSubtitle}>Потягніть вниз щоб відкрити меню</ThemedText>
+          </View>
+        </View>
+      );
+    }
+    
+    if (!currentDevice) return null;
+
+    // Функція для оцінки загальної якості води (спрощена версія)
+    const getQuickWaterAssessment = (params: any) => {
+      if (!params) return { statusColor: Colors.light.tabIconDefault, statusText: 'Завантаження даних', statusIcon: 'time-outline' };
+      
+      let issues = 0;
+      let warnings = 0;
+      
+      if (params.pH !== undefined) {
+        if (params.pH < 6.0 || params.pH > 9.0) issues++;
+        else if (params.pH < 6.5 || params.pH > 8.5) warnings++;
+      }
+      
+      if (params.temperature !== undefined) {
+        if (params.temperature > 30) issues++;
+        else if (params.temperature < 5 || params.temperature > 25) warnings++;
+      }
+      
+      if (params.tds !== undefined) {
+        if (params.tds > 500) issues++;
+        else if (params.tds > 300) warnings++;
+      }
+      
+      if (params.turbidity !== undefined) {
+        if (params.turbidity > 10) issues++;
+        else if (params.turbidity > 5) issues++;
+        else if (params.turbidity > 1) warnings++;
+      }
+      
+      if (issues > 0) {
+        return { statusColor: '#F44336', statusText: 'Потребує уваги', statusIcon: 'alert-circle' };
+      } else if (warnings > 0) {
+        return { statusColor: '#FF9800', statusText: 'Прийнятна якість', statusIcon: 'warning-outline' };
+      } else {
+        return { statusColor: '#4CAF50', statusText: 'Відмінна якість', statusIcon: 'checkmark-circle' };
+      }
+    };    const waterAssessment = getQuickWaterAssessment(detailedParams);
+    
+    const handleInfoCardPress = () => {
+      setShowDetailedView(true);
+      translateX.value = withTiming(-screenWidth, { 
+        duration: 300, 
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1) 
+      });
+    };
+
+    // Компактна карточка з інформацією про пристрій
+    return (
+      <TouchableOpacity 
+        style={[styles.infoCard, { borderLeftColor: waterAssessment.statusColor || Colors.light.tint }]}
+        onPress={handleInfoCardPress}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="hardware-chip-outline" size={24} color={Colors.light.tint} />
+        <View style={styles.cardTextContainer}>
+          <ThemedText style={styles.cardTitle}>{currentDevice.customName}</ThemedText>
+          <View style={styles.statusRow}>
+            <View style={styles.connectionStatusItem}>
+              <Ionicons 
+                name={
+                  connectionStatus === 'connected' ? 'wifi' :
+                  connectionStatus === 'error' ? 'cloud-offline-outline' :
+                  'cloud-outline'
+                }
+                size={14} 
+                color={
+                  connectionStatus === 'connected' ? Colors.light.success :
+                  connectionStatus === 'error' ? Colors.light.error :
+                  Colors.light.tabIconDefault
+                }
+              />
+              <ThemedText style={[styles.statusText, {
+                color: connectionStatus === 'connected' ? Colors.light.success :
+                       connectionStatus === 'error' ? Colors.light.error :
+                       Colors.light.tabIconDefault
+              }]}>
+                {connectionStatus === 'connected' ? 'Підключено' :
+                 connectionStatus === 'error' ? 'Помилка' :
+                 'Не підключено'}
+              </ThemedText>
+            </View>
+            
+            <View style={styles.waterQualityItem}>
+              <Ionicons name={waterAssessment.statusIcon as any} size={14} color={waterAssessment.statusColor} />
+              <ThemedText style={[styles.statusText, { color: waterAssessment.statusColor }]}>
+                {waterAssessment.statusText}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward-outline" size={16} color={Colors.light.tabIconDefault} />
+      </TouchableOpacity>
+    );
+  };
+  // Додаємо функцію для рендерингу карточки WQI діаграми
+  const renderWQIChartCard = () => {
+    if (!currentDevice || userDevices.length === 0) {
+      return null;
+    }    const handleWQICardPress = () => {
+      setShowWQIChart(true);
+    };
+
+    return (
+      <TouchableOpacity 
+        style={styles.wqiChartCard}
+        onPress={handleWQICardPress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.wqiChartCardHeader}>
+          <Ionicons name="analytics-outline" size={24} color={Colors.light.tint} />
+          <ThemedText style={styles.wqiChartCardTitle}>Індекс якості води (WQI)</ThemedText>
+          <Ionicons name="chevron-forward-outline" size={20} color={Colors.light.tabIconDefault} />
+        </View>
+        
+        <View style={styles.wqiChartCardContent}>
+          <View style={styles.wqiScoreDisplay}>
+            <ThemedText style={[styles.wqiScoreText, { color: getWaterQualityColor(score) }]}>
+              {score}
+            </ThemedText>
+            <ThemedText style={styles.wqiScoreLabel}>WQI</ThemedText>
+          </View>
+          
+          <View style={styles.wqiProgressContainer}>
+            <View style={styles.wqiProgressBar}>
+              <View 
+                style={[
+                  styles.wqiProgressFill, 
+                  { 
+                    width: `${score}%`,
+                    backgroundColor: getWaterQualityColor(score)
+                  }
+                ]} 
+              />
+            </View>
+            <View style={styles.wqiLabelsContainer}>
+              <ThemedText style={styles.wqiProgressLabel}>0</ThemedText>
+              <ThemedText style={styles.wqiProgressLabel}>50</ThemedText>
+              <ThemedText style={styles.wqiProgressLabel}>100</ThemedText>
+            </View>
+          </View>
+        </View>
+        
+        <ThemedText style={styles.wqiChartCardSubtitle}>
+          Натисніть для перегляду детальної діаграми
+        </ThemedText>
+      </TouchableOpacity>
     );
   };
 
@@ -615,30 +734,21 @@ export default function HomeScreen() {
           {/* ThemedView also needs a transparent background */}
           <ThemedView style={[styles.container, { backgroundColor: 'transparent' }]}>
             {/* WaveAnimation is no longer here */}
-            
-            <Animated.View style={[styles.headerContainer, animatedMainScreenStyle]}>
-              {renderHeaderContent()}
-            </Animated.View>
-
-            <Animated.View style={[styles.mainContentContainer, animatedMainScreenStyle]}>
+              <Animated.View style={[styles.infoCardsContainer, animatedMainScreenStyle]}>
+              {renderInfoCards()}
+            </Animated.View>            <Animated.View style={[styles.mainContentContainer, animatedMainScreenStyle]}>
               {userDevices.length === 0 ? (
                 <ScoreCircle
-                  size={screenWidth * 0.7}
-                  strokeWidth={20}
+                  size={screenWidth * 0.55}
+                  strokeWidth={15}
                   isAddMode={true}
                   onAddButtonPress={openAddDeviceModal}
-                  // Optional props are omitted as per their definition in ScoreCircleProps for add mode
-                  // serverEndpoint={undefined} // No longer explicitly passing undefined
-                  // deviceId={undefined}
-                  // initialScore={undefined}
-                  // onScoreUpdate={undefined}
-                  // onFetchError={undefined}
                 />
               ) : currentDevice && currentDevice.serverConfig ? (
                 <ScoreCircle
                   key={currentDevice.id} 
-                  size={screenWidth * 0.7}
-                  strokeWidth={20}
+                  size={screenWidth * 0.55}
+                  strokeWidth={15}
                   initialScore={score}
                   serverEndpoint={CENTRAL_SERVER_ENDPOINT}
                   deviceId={currentDevice.serverConfig.deviceId}
@@ -659,7 +769,10 @@ export default function HomeScreen() {
               )}
             </Animated.View>
 
-          {userDevices.length > 0 && currentDevice && (
+            {/* WQI Chart Card в нижній частині екрану */}
+            <Animated.View style={[styles.wqiChartCardContainer, animatedMainScreenStyle]}>
+              {renderWQIChartCard()}
+            </Animated.View>          {userDevices.length > 0 && currentDevice && (
             <Animated.View style={[styles.detailedViewContainer, animatedDetailedViewStyle]}>
               <DetailedParametersView 
                 parameters={detailedParams} 
@@ -736,11 +849,63 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-            </View>
-          </Modal>
+            </View>          </Modal>
         </ThemedView>
       </Animated.View>
     </GestureDetector>
+    
+    {/* WQI Chart Modal */}
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showWQIChart}
+      onRequestClose={() => setShowWQIChart(false)}
+    >
+      <View style={{
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}>
+        <View style={{
+          backgroundColor: Colors.light.background,
+          borderRadius: 20,
+          padding: 20,
+          margin: 20,
+          width: screenWidth - 40,
+          height: screenHeight * 0.7,
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 2,
+          },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+        }}>
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}>
+            <ThemedText style={{
+              fontSize: 18,
+              fontWeight: 'bold',
+              color: Colors.light.text,
+            }}>
+              Індекс якості води (WQI)
+            </ThemedText>
+            <TouchableOpacity onPress={() => setShowWQIChart(false)}>
+              <Ionicons name="close" size={24} color={Colors.light.text} />
+            </TouchableOpacity>
+          </View>
+            <WQIChartView 
+            deviceId={currentDevice?.serverConfig?.deviceId || '111001'}
+          />
+        </View>
+      </View>
+    </Modal>
 </View>
   );
 }
@@ -801,16 +966,11 @@ const styles = StyleSheet.create({
     fontSize: 14, // Adjusted font size
     color: Colors.light.text,
     opacity: 0.7, // Slightly less prominent
-  },
-  connectionIcon: {
+  },  connectionIcon: {
     marginRight: 8, // Space between icon and status text
   },
   statusTextContainer: { // New container for status texts
     alignItems: 'flex-end', // Align text to the right if it wraps
-  },
-  statusText: { // Base style for status texts
-    fontSize: 14, // Increased font size
-    color: Colors.light.text,
   },
   nextUpdateText: {
     fontSize: 14, // Increased font size
@@ -821,15 +981,14 @@ const styles = StyleSheet.create({
     // fontSize: 14, // Inherits from statusText
     color: Colors.light.error,
     fontWeight: 'bold',
-  },
-  mainContentContainer: {
+  },  mainContentContainer: {
     flex: 1,
     width: screenWidth,
-    alignItems: 'center', // Горизонтальне центрування
-    paddingTop: screenHeight * 0.20, // Додаємо відступ зверху, щоб підняти ScoreCircle
-                                     // Це приблизно 15% висоти екрана. Можна налаштувати.
-    zIndex: 10, // Переконуємося, що цей контейнер вище за WaveAnimation
-    backgroundColor: 'transparent', // Додано для прозорості над WaveAnimation
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -200, // Зміщуємо коло трішки вище центру
+    zIndex: 100,
+    backgroundColor: 'transparent',
   },
   detailedViewContainer: {
     width: screenWidth,
@@ -939,10 +1098,148 @@ const styles = StyleSheet.create({
     color: Colors.dark.text, // Assuming Colors.dark.text is a dark color suitable for light backgrounds
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  centeredMessageContainer: {
+  },  centeredMessageContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },  infoCardsContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 80 : 90,
+    left: 20,
+    right: 20,
+    zIndex: 100,
+  },
+  infoCard: {
+    backgroundColor: Colors.light.background, 
+    borderRadius: 15,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.light.tint,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.light.text,
+  },  cardSubtitle: {
+    fontSize: 13,
+    color: Colors.light.tabIconDefault,
+    marginTop: 2,
+  },
+  // Стилі для компактної карточки
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  connectionStatusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  waterQualityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  statusText: {
+    fontSize: 12,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  
+  // Стилі для карточки WQI діаграми
+  wqiChartCardContainer: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 100 : 120,
+    left: 20,
+    right: 20,
+    zIndex: 100,
+  },
+  wqiChartCard: {
+    backgroundColor: Colors.light.background,
+    borderRadius: 15,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.light.tint,
+  },  wqiChartCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },wqiChartCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.light.text,
+    flex: 1,
+    marginLeft: 8,
+  },
+  wqiChartCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  wqiScoreDisplay: {
+    alignItems: 'center',
+    marginRight: 16,
+  },  wqiScoreText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  wqiScoreLabel: {
+    fontSize: 12,
+    color: Colors.light.tabIconDefault,
+    marginTop: 2,
+  },
+  wqiProgressContainer: {
+    flex: 1,
+  },
+  wqiProgressBar: {
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  wqiProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  wqiLabelsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  wqiProgressLabel: {
+    fontSize: 10,
+    color: Colors.light.tabIconDefault,
+  },
+  wqiChartCardSubtitle: {
+    fontSize: 12,
+    color: Colors.light.tabIconDefault,
+    textAlign: 'center',
   },
 });
