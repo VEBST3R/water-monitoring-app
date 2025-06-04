@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Тест історії WQI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .device { border: 1px solid #ddd; margin: 10px; padding: 15px; border-radius: 5px; }
+        .wqi-value { font-size: 24px; font-weight: bold; color: #2196F3; }
+        .history { margin-top: 10px; }
+        .history-point { background: #f5f5f5; margin: 5px 0; padding: 5px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🌊 Тест історії WQI для всіх пристроїв</h1>
+    
+    <div id="devices">
+        Завантаження...
+    </div>
+
+    <script>
+        const devices = ['111001', '222002', '333003'];
+        const deviceNames = {
+            '111001': 'Основний резервуар',
+            '222002': 'Резервний резервуар', 
+            '333003': 'Аварійний резервуар'
+        };
+
+        async function loadDeviceData() {
+            const devicesDiv = document.getElementById('devices');
+            devicesDiv.innerHTML = '';
+
+            for (const deviceId of devices) {
+                try {
+                    // Отримуємо поточний WQI
+                    const wqiResponse = await fetch(`http://localhost:1880/api/getWQI?device=${deviceId}`);
+                    const wqiData = await wqiResponse.json();
+
+                    // Отримуємо історію
+                    const historyResponse = await fetch(`http://localhost:1880/api/getParameterHistory?device=${deviceId}&parameter=wqi&hours=24`);
+                    const historyData = await historyResponse.json();
+
+                    const deviceDiv = document.createElement('div');
+                    deviceDiv.className = 'device';
+                    deviceDiv.innerHTML = `
+                        <h3>📱 ${deviceNames[deviceId]} (${deviceId})</h3>
+                        <div class="wqi-value">WQI: ${wqiData.wqi}</div>
+                        <div><strong>Джерело історії:</strong> ${historyData.source}</div>
+                        <div><strong>Кількість точок:</strong> ${historyData.count}</div>
+                        <div class="history">
+                            <h4>Історія (останні 5 точок):</h4>
+                            ${historyData.data.slice(-5).map(point => 
+                                `<div class="history-point">
+                                    ${new Date(point.timestamp).toLocaleString()} - WQI: ${point.value}
+                                </div>`
+                            ).join('')}
+                        </div>
+                    `;
+                    devicesDiv.appendChild(deviceDiv);
+
+                } catch (error) {
+                    console.error(`Помилка для пристрою ${deviceId}:`, error);
+                }
+            }
+        }
+
+        // Завантажуємо дані при старті
+        loadDeviceData();
+
+        // Оновлюємо кожні 10 секунд
+        setInterval(loadDeviceData, 10000);
+    </script>
+</body>
+</html>

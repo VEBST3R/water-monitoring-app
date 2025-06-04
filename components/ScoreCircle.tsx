@@ -2,7 +2,7 @@ import { Colors } from '@/constants/Colors'; // Import Colors for default tint
 import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, AppStateStatus, Dimensions, NativeEventSubscription, Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native'; // Added NativeEventSubscription
-import Animated, { Easing, interpolateColor, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg'; // Imported Circle
 import { getWaterQualityColor } from '../utils/colorUtils';
 import { calculateWQI } from '../utils/wqiUtils';
@@ -60,6 +60,21 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
     const appState = useRef(AppState.currentState);
     const updateIntervalRef = useRef<number | null>(null);
     const lastFetchTimeRef = useRef<number>(0);
+
+    // Синхронізуємо внутрішній стан з пропсом initialScore
+    useEffect(() => {
+      if (!isAddMode && initialScore !== currentScore) {
+        setCurrentScore(initialScore);
+        currentColorSV.value = getWaterQualityColor(initialScore);
+      }
+    }, [initialScore, isAddMode, currentScore, currentColorSV]);
+
+    // Оновлюємо кольори при зміні currentScore
+    useEffect(() => {
+      if (!isAddMode) {
+        currentColorSV.value = getWaterQualityColor(currentScore);
+      }
+    }, [currentScore, isAddMode, currentColorSV]);
 
     const defaultStrokeColor = Colors.light.tint; // Defined here
 
@@ -251,16 +266,15 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
       return {
         transform: [{ scale: pressScale.value }],
       };
-    });
-
-    const animatedTextStyle = useAnimatedStyle(() => {
-      const textColor = interpolateColor(
-        currentScore,
-        [0, 20, 40, 60, 80, 100],
-        ['#FF0000', '#FF4500', '#FFD700', '#9ACD32', '#32CD32', '#006400'] // Example: Red to Dark Green
-      );
+    });    const animatedTextStyle = useAnimatedStyle(() => {
+      'worklet';
+      if (isAddMode) {
+        return {
+          color: defaultStrokeColor,
+        };
+      }
       return {
-        color: textColor,
+        color: currentColorSV.value,
       };
     });
 
@@ -328,13 +342,12 @@ const ScoreCircle = forwardRef<any, ScoreCircleProps>(
               <>
                 <Text style={[styles.errorTextSmall, { fontSize: size * 0.08 }]}>Помилка</Text>
                 <Text style={[styles.errorTextDetails, { fontSize: size * 0.06 }]}>{error.length > 50 ? error.substring(0, 47) + "..." : error}</Text>
-              </>
-            ) : (
+              </>            ) : (
               <>
                 <Animated.Text style={[styles.scoreText, { fontSize: size * 0.3 }, animatedTextStyle]}>
                   {currentScore.toFixed(0)}
                 </Animated.Text>
-                <Animated.Text style={[styles.wqiText, { fontSize: size * 0.1 }, animatedWqiTextStyle]}> {/* Changed to Animated.Text and use animatedWqiTextStyle */}
+                <Animated.Text style={[styles.wqiText, { fontSize: size * 0.1 }, animatedWqiTextStyle]}>
                   {wqiText}
                 </Animated.Text>
               </>

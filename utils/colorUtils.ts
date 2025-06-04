@@ -1,11 +1,10 @@
 export const getWaterQualityColor = (score: number): string => {
-  if (score <= 0) return '#A52A2A'; // Brown for 0 or less
-  if (score <= 20) return '#A52A2A'; // Brown
-  if (score <= 40) return '#FF0000'; // Red
-  if (score <= 60) return '#E9CE46'; // Darker Yellow
-  if (score <= 80) return '#008000'; // Green
-  if (score <= 100) return '#0000FF'; // Blue
-  return '#0000FF'; // Blue for 100 or more
+  if (score <= 20) return '#A52A2A'; // Brown (Very Poor / Dirty)
+  if (score <= 40) return '#A0522D'; // Sienna (Poor)
+  if (score <= 55) return '#F4A460'; // SandyBrown (Fair)
+  if (score <= 70) return '#F0E68C'; // Khaki (Moderate)
+  if (score <= 85) return '#48D1CC'; // MediumTurquoise (Good)
+  return '#1E90FF'; // DodgerBlue (Excellent / Clean Water for scores > 85)
 };
 
 // Updated to return a single base color for waves

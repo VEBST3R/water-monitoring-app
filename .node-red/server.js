@@ -3,6 +3,15 @@ const RED = require('node-red');
 const http = require('http');
 const path = require('path');
 
+// Імпорт fetch для роботи з API (для Node.js версій нижче 18)
+let fetch;
+try {
+    fetch = global.fetch || require('node-fetch');
+} catch (e) {
+    console.log('Використовуємо глобальний fetch або створюємо заглушку');
+    fetch = () => Promise.reject(new Error('Fetch не доступний'));
+}
+
 // Створення Express app
 const app = express();
 
@@ -38,61 +47,72 @@ const settings = {
 // Ініціалізація Node-RED
 RED.init(server, settings);
 
-// Зберігання історичних даних
-const historicalData = new Map();
+// Розширена система зберігання історії для всіх параметрів
+const parameterHistory = new Map(); // Карта deviceId -> {parameterType -> array of {timestamp, value}}
 
-// Допоміжна функція для створення початкових історичних даних
-function generateInitialHistory(deviceId, currentParams) {
-    const history = [];
-    const now = Date.now();
-    const hoursBack = 24; // 24 години історії
-    
-    for (let i = hoursBack; i >= 0; i--) {
-        const timestamp = now - (i * 60 * 60 * 1000); // Кожна година
-          // Генеруємо реалістичні дані на основі поточних параметрів
-        const variation = 0.15; // Збільшуємо варіацію до 15%
-        const data = {
-            timestamp,
-            pH: Number((currentParams.pH + (Math.random() - 0.5) * currentParams.pH * variation).toFixed(2)),
-            temperature: Number((currentParams.temperature + (Math.random() - 0.5) * currentParams.temperature * variation).toFixed(1)),
-            tds: Math.floor(currentParams.tds + (Math.random() - 0.5) * currentParams.tds * variation),
-            turbidity: Number((currentParams.turbidity + (Math.random() - 0.5) * Math.max(currentParams.turbidity * variation, 0.3)).toFixed(1))
-        };
-          // Переконуємося що значення в розумних межах
-        data.pH = Math.max(0, Math.min(14, data.pH));
-        data.temperature = Math.max(0, Math.min(40, data.temperature));
-        data.tds = Math.max(0, Math.min(2000, data.tds));
-        data.turbidity = Math.max(0.1, Math.min(50, data.turbidity)); // Мінімум 0.1 для каламутності
-        
-        history.push(data);
+// Підтримувані параметри
+const SUPPORTED_PARAMETERS = ['wqi', 'ph', 'temperature', 'tds', 'turbidity'];
+
+// Функція для додавання нової точки параметра в історію
+function addParameterPoint(deviceId, parameterType, value) {
+    if (!SUPPORTED_PARAMETERS.includes(parameterType)) {
+        console.warn(`⚠️ Непідтримуваний параметр: ${parameterType}`);
+        return;
+    }
+
+    if (!parameterHistory.has(deviceId)) {
+        parameterHistory.set(deviceId, new Map());
     }
     
-    return history;
-}
-
-// Функція для додавання нової точки в історію
-function addHistoryPoint(deviceId, params) {
-    if (!historicalData.has(deviceId)) {
-        historicalData.set(deviceId, generateInitialHistory(deviceId, params));
+    const deviceHistory = parameterHistory.get(deviceId);
+    if (!deviceHistory.has(parameterType)) {
+        deviceHistory.set(parameterType, []);
     }
     
-    const history = historicalData.get(deviceId);
+    const history = deviceHistory.get(parameterType);
     const newPoint = {
         timestamp: Date.now(),
-        pH: params.pH,
-        temperature: params.temperature,
-        tds: params.tds,
-        turbidity: params.turbidity
+        value: value
     };
     
     history.push(newPoint);
     
-    // Зберігаємо тільки останні 100 точок (приблизно 4 дні при оновленні кожну годину)
-    if (history.length > 100) {
+    // Зберігаємо тільки останні 48 точок (48 годин історії)
+    if (history.length > 48) {
         history.shift();
     }
     
-    historicalData.set(deviceId, history);
+    deviceHistory.set(parameterType, history);
+    console.log(`📊 ${parameterType.toUpperCase()} збережено: пристрій ${deviceId}, ${parameterType}=${value}, час=${new Date(newPoint.timestamp).toLocaleString()}`);
+}
+
+// Функція для отримання історії конкретного параметра
+function getParameterHistory(deviceId, parameterType, hoursBack = 24) {
+    if (!parameterHistory.has(deviceId)) {
+        return [];
+    }
+    
+    const deviceHistory = parameterHistory.get(deviceId);
+    if (!deviceHistory.has(parameterType)) {
+        return [];
+    }
+    
+    const history = deviceHistory.get(parameterType);
+    const cutoffTime = Date.now() - (hoursBack * 60 * 60 * 1000);
+    
+    return history.filter(point => point.timestamp >= cutoffTime);
+}
+
+// Зворотна сумісність: функції для WQI
+function addWQIPoint(deviceId, wqi) {
+    addParameterPoint(deviceId, 'wqi', wqi);
+}
+
+function getWQIHistory(deviceId, hoursBack = 24) {
+    return getParameterHistory(deviceId, 'wqi', hoursBack).map(point => ({
+        timestamp: point.timestamp,
+        wqi: point.value
+    }));
 }
 
 // Middleware для обробки JSON
@@ -124,11 +144,11 @@ function calculateWQI(params) {
     return Math.max(0, Math.min(100, totalWQI));
 }
 
-// Новий endpoint для отримання історичних даних
+// Розширений endpoint для отримання історичних даних всіх параметрів
 app.get(settings.httpNodeRoot + '/getParameterHistory', (req, res) => {
     const deviceId = req.query.device;
     const parameter = req.query.parameter; // pH, temperature, tds, turbidity, wqi
-    const hoursBack = parseInt(req.query.hours) || 24; // За замовчуванням 24 години
+    const hoursBack = parseInt(req.query.hours) || 24;
     
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -139,93 +159,120 @@ app.get(settings.httpNodeRoot + '/getParameterHistory', (req, res) => {
             message: 'Вкажіть параметр device'
         });
     }
-      // Якщо історії ще немає, створюємо базову
-    if (!historicalData.has(deviceId)) {
-        let currentParams = { pH: 7.2, temperature: 20, tds: 300, turbidity: 1.5 };
-        try {
-            if (RED && RED.settings && RED.settings.get) {
-                const globalContext = RED.settings.get('context');
-                if (globalContext && globalContext.default) {
-                    const context = globalContext.default;
-                    const devices = context.get('sim_devices');
-                    if (devices && devices[deviceId]) {
-                        currentParams = devices[deviceId].current;
-                    }
-                }
-            }
-        } catch (e) {
-            console.log('Використовуємо дефолтні параметри для генерації історії');
-        }
-        historicalData.set(deviceId, generateInitialHistory(deviceId, currentParams));
-    }
-    const history = historicalData.get(deviceId);
-    const cutoffTime = Date.now() - (hoursBack * 60 * 60 * 1000);
-    let filteredHistory = history.filter(point => point.timestamp >= cutoffTime);
-    // --- Додаємо спеціальну обробку для WQI ---
-    if (parameter && parameter.toLowerCase() === 'wqi') {
-        const wqiHistory = filteredHistory.map(point => ({
-            timestamp: point.timestamp,
-            value: calculateWQI(point)
-        }));
-        return res.json({
-            deviceId,
-            parameter: 'wqi',
-            hoursBack,
-            data: wqiHistory,
-            count: wqiHistory.length
+
+    if (!parameter) {
+        return res.status(400).json({
+            error: 'Parameter is required',
+            message: 'Вкажіть параметр parameter',
+            supportedParameters: SUPPORTED_PARAMETERS
         });
     }
-    // Якщо запитано конкретний параметр, повертаємо тільки його
-    if (parameter && ['pH', 'temperature', 'tds', 'turbidity'].includes(parameter)) {
-        filteredHistory = filteredHistory.map(point => ({
-            timestamp: point.timestamp,
-            value: point[parameter]
-        }));
-        return res.json({
-            deviceId,
-            parameter,
-            hoursBack,
-            data: filteredHistory,
-            count: filteredHistory.length
+
+    const parameterLower = parameter.toLowerCase();
+    
+    if (!SUPPORTED_PARAMETERS.includes(parameterLower)) {
+        return res.status(400).json({
+            error: 'Parameter not supported',
+            message: `Параметр '${parameter}' не підтримується`,
+            supportedParameters: SUPPORTED_PARAMETERS
         });
     }
-    // Повертаємо всі параметри
-    res.json({
+
+    // Отримуємо історію для будь-якого підтримуваного параметра
+    const history = getParameterHistory(deviceId, parameterLower, hoursBack);
+    
+    // Форматуємо дані для сумісності з фронтендом
+    const formattedHistory = history.map(point => ({
+        timestamp: point.timestamp,
+        value: point.value
+    }));
+    
+    return res.json({
         deviceId,
+        parameter: parameterLower,
         hoursBack,
-        data: filteredHistory,
-        count: filteredHistory.length
+        data: formattedHistory,
+        count: formattedHistory.length,
+        source: formattedHistory.length > 0 ? `${parameterLower}_history` : 'no_data'
     });
 });
 
-// Новий endpoint для оновлення історичних даних при отриманні нових параметрів
+// Розширений endpoint для оновлення історичних даних всіх параметрів
 app.post(settings.httpNodeRoot + '/updateParameterHistory', (req, res) => {
-    const { deviceId, parameters } = req.body;
+    const { deviceId, wqi, pH, temperature, tds, turbidity } = req.body;
     
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
-    if (!deviceId || !parameters) {
+    if (!deviceId) {
         return res.status(400).json({
             error: 'Missing required data',
-            message: 'Потрібні deviceId та parameters'
+            message: 'Потрібний deviceId'
         });
     }
+
+    const updates = [];
+    const errors = [];
     
     try {
-        addHistoryPoint(deviceId, parameters);
+        // Обробляємо кожен параметр окремо
+        if (wqi !== undefined) {
+            addParameterPoint(deviceId, 'wqi', wqi);
+            updates.push(`WQI: ${wqi}`);
+        }        if (pH !== undefined) {
+            addParameterPoint(deviceId, 'ph', pH);
+            updates.push(`pH: ${pH}`);
+        }
+        if (temperature !== undefined) {
+            addParameterPoint(deviceId, 'temperature', temperature);
+            updates.push(`Temperature: ${temperature}°C`);
+        }
+        if (tds !== undefined) {
+            addParameterPoint(deviceId, 'tds', tds);
+            updates.push(`TDS: ${tds} ppm`);
+        }
+        if (turbidity !== undefined) {
+            addParameterPoint(deviceId, 'turbidity', turbidity);
+            updates.push(`Turbidity: ${turbidity} NTU`);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({
+                error: 'No valid parameters provided',
+                message: 'Не надано жодного валідного параметра',
+                supportedParameters: SUPPORTED_PARAMETERS
+            });
+        }
+        
         res.json({
             success: true,
-            message: 'Історичні дані оновлено',
-            timestamp: Date.now()
+            message: `Параметри збережено для пристрою ${deviceId}: ${updates.join(', ')}`,
+            timestamp: Date.now(),
+            updatedParameters: updates.length
         });
     } catch (error) {
-        console.error('Error updating history:', error);
+        console.error('Error updating parameter history:', error);
         res.status(500).json({
             error: 'Internal server error',
-            message: 'Помилка оновлення історичних даних'
-        });
-    }
+            message: 'Помилка оновлення історії параметрів'
+        });    }
+});
+
+// Новий endpoint для отримання списку підтримуваних параметрів
+app.get(settings.httpNodeRoot + '/getSupportedParameters', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    res.json({
+        supportedParameters: SUPPORTED_PARAMETERS,        parameterInfo: {
+            'wqi': { name: 'Water Quality Index', unit: '', description: 'Індекс якості води' },
+            'ph': { name: 'pH Level', unit: '', description: 'Рівень кислотності' },
+            'temperature': { name: 'Temperature', unit: '°C', description: 'Температура води' },
+            'tds': { name: 'Total Dissolved Solids', unit: 'ppm', description: 'Загальні розчинені речовини' },
+            'turbidity': { name: 'Turbidity', unit: 'NTU', description: 'Каламутність води' }
+        },
+        totalParameters: SUPPORTED_PARAMETERS.length
+    });
 });
 
 // Підключення маршрутів
@@ -242,14 +289,17 @@ server.listen(PORT, function() {
     console.log(`   • GET  ${settings.httpNodeRoot}/getDeviceStatus?device=111001`);
     console.log(`   • POST ${settings.httpNodeRoot}/calibrateSensors?device=111001`);
     console.log(`   • GET  ${settings.httpNodeRoot}/listAvailableSensors`);
-    console.log(`   • GET  ${settings.httpNodeRoot}/getParameterHistory?device=111001&parameter=pH&hours=24`);
-    console.log(`   • POST ${settings.httpNodeRoot}/updateParameterHistory`);
+    console.log(`   • GET  ${settings.httpNodeRoot}/getParameterHistory?device=111001&parameter={wqi|ph|temperature|tds|turbidity}&hours=24`);
+    console.log(`   • POST ${settings.httpNodeRoot}/updateParameterHistory (body: {deviceId, wqi?, pH?, temperature?, tds?, turbidity?})`);
+    console.log(`   • GET  ${settings.httpNodeRoot}/getSupportedParameters`);
     console.log('');
     console.log('💡 Для зупинки сервера натисніть Ctrl+C');
+    console.log('📊 Історія параметрів контролюється через Node-RED flow');
     
     // Запуск Node-RED runtime
     RED.start().then(() => {
         console.log('✅ Node-RED flows завантажені та запущені');
+        console.log('🔄 Автоматичне збереження історії відключено - використовуйте Node-RED inject для контролю');
     }).catch(err => {
         console.error('❌ Помилка запуску Node-RED:', err);
     });

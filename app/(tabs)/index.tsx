@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const CENTRAL_SERVER_ENDPOINT = '192.168.1.104:1880';
+const CENTRAL_SERVER_ENDPOINT = '192.168.1.101:1880';
 const ASYNC_STORAGE_DEVICES_KEY = '@userDevices';
 const ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY = '@currentDeviceIndex';
 
@@ -41,7 +41,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true); 
   const [isAddDeviceModalVisible, setAddDeviceModalVisible] = useState(false);
   const [newUserDeviceName, setNewUserDeviceName] = useState('');
-  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
+  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error' | 'loading'>('disconnected');
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [nextUpdateTimer, setNextUpdateTimer] = useState(0);
   const [showWQIChart, setShowWQIChart] = useState(false);
@@ -142,8 +142,6 @@ export default function HomeScreen() {
     const saveData = async () => {
       if (!isLoading) { // Only save if initial loading is complete
         try {
-          await AsyncStorage.setItem(ASYNC_STORAGE_DEVICES_KEY, JSON.stringify(userDevices));
-          // Ensure currentDeviceIndex is valid before saving, especially if userDevices is empty
           const indexToSave = userDevices.length > 0 && currentDeviceIndex < userDevices.length ? currentDeviceIndex : 0;
           await AsyncStorage.setItem(ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY, JSON.stringify(indexToSave));
         } catch (e) {
@@ -154,6 +152,28 @@ export default function HomeScreen() {
     saveData();
   }, [userDevices, currentDeviceIndex, isLoading]);
 
+  // Effect для автооновлення даних кожні 5 секунд
+  useEffect(() => {
+    if (dataUpdateIntervalRef.current) {
+      clearInterval(dataUpdateIntervalRef.current);
+    }
+    
+    if (currentDevice?.serverConfig?.deviceId && connectionStatus !== 'error') {
+      // Запускаємо перше оновлення відразу
+      updateCurrentDeviceData();
+      
+      // Встановлюємо інтервал для оновлення кожні 5 секунд
+      dataUpdateIntervalRef.current = setInterval(() => {
+        updateCurrentDeviceData();
+      }, UPDATE_INTERVAL) as unknown as number;
+    }
+    
+    return () => {
+      if (dataUpdateIntervalRef.current) {
+        clearInterval(dataUpdateIntervalRef.current);
+      }
+    };
+  }, [currentDevice?.serverConfig?.deviceId, connectionStatus, updateCurrentDeviceData]);
 
   const openAddDeviceModal = () => {
     setNewUserDeviceName('');
@@ -542,58 +562,32 @@ export default function HomeScreen() {
         </View>
       );
     }
-    
-    if (!currentDevice) return null;
+      if (!currentDevice) return null;
 
-    // Функція для оцінки загальної якості води (спрощена версія)
-    const getQuickWaterAssessment = (params: any) => {
-      if (!params) return { statusColor: Colors.light.tabIconDefault, statusText: 'Завантаження даних', statusIcon: 'time-outline' };
-      
-      let issues = 0;
-      let warnings = 0;
-      
-      if (params.pH !== undefined) {
-        if (params.pH < 6.0 || params.pH > 9.0) issues++;
-        else if (params.pH < 6.5 || params.pH > 8.5) warnings++;
-      }
-      
-      if (params.temperature !== undefined) {
-        if (params.temperature > 30) issues++;
-        else if (params.temperature < 5 || params.temperature > 25) warnings++;
-      }
-      
-      if (params.tds !== undefined) {
-        if (params.tds > 500) issues++;
-        else if (params.tds > 300) warnings++;
-      }
-      
-      if (params.turbidity !== undefined) {
-        if (params.turbidity > 10) issues++;
-        else if (params.turbidity > 5) issues++;
-        else if (params.turbidity > 1) warnings++;
-      }
-      
-      if (issues > 0) {
-        return { statusColor: '#F44336', statusText: 'Потребує уваги', statusIcon: 'alert-circle' };
-      } else if (warnings > 0) {
-        return { statusColor: '#FF9800', statusText: 'Прийнятна якість', statusIcon: 'warning-outline' };
-      } else {
-        return { statusColor: '#4CAF50', statusText: 'Відмінна якість', statusIcon: 'checkmark-circle' };
-      }
-    };    const waterAssessment = getQuickWaterAssessment(detailedParams);
-    
     const handleInfoCardPress = () => {
       setShowDetailedView(true);
       translateX.value = withTiming(-screenWidth, { 
         duration: 300, 
         easing: Easing.bezier(0.25, 0.1, 0.25, 1) 
       });
+    };const connectionStatusItem = {
+      label: "Статус з'єднання",
+      value: connectionStatus === 'connected' ? 'Підключено' : 
+             connectionStatus === 'loading' ? 'Підключення...' : 'Помилка підключення',
+      color: connectionStatus === 'connected' ? '#4CAF50' : 
+             connectionStatus === 'loading' ? '#FF9800' : '#F44336'
+    };
+
+    const timerDisplayItem = {
+      label: "Наступне оновлення через",
+      value: `${nextUpdateTimer} сек`,
+      color: '#007AFF'
     };
 
     // Компактна карточка з інформацією про пристрій
     return (
       <TouchableOpacity 
-        style={[styles.infoCard, { borderLeftColor: waterAssessment.statusColor || Colors.light.tint }]}
+        style={[styles.infoCard, { borderLeftColor: connectionStatusItem.color }]}
         onPress={handleInfoCardPress}
         activeOpacity={0.7}
       >
@@ -609,32 +603,21 @@ export default function HomeScreen() {
                   'cloud-outline'
                 }
                 size={14} 
-                color={
-                  connectionStatus === 'connected' ? Colors.light.success :
-                  connectionStatus === 'error' ? Colors.light.error :
-                  Colors.light.tabIconDefault
-                }
+                color={connectionStatusItem.color}
               />
-              <ThemedText style={[styles.statusText, {
-                color: connectionStatus === 'connected' ? Colors.light.success :
-                       connectionStatus === 'error' ? Colors.light.error :
-                       Colors.light.tabIconDefault
-              }]}>
-                {connectionStatus === 'connected' ? 'Підключено' :
-                 connectionStatus === 'error' ? 'Помилка' :
-                 'Не підключено'}
+              <ThemedText style={[styles.statusText, { color: connectionStatusItem.color }]}>
+                {connectionStatusItem.value}
               </ThemedText>
             </View>
             
             <View style={styles.waterQualityItem}>
-              <Ionicons name={waterAssessment.statusIcon as any} size={14} color={waterAssessment.statusColor} />
-              <ThemedText style={[styles.statusText, { color: waterAssessment.statusColor }]}>
-                {waterAssessment.statusText}
+              <Ionicons name="time-outline" size={14} color={timerDisplayItem.color} />
+              <ThemedText style={[styles.statusText, { color: timerDisplayItem.color }]}>
+                {timerDisplayItem.value}
               </ThemedText>
             </View>
           </View>
         </View>
-        <Ionicons name="chevron-forward-outline" size={16} color={Colors.light.tabIconDefault} />
       </TouchableOpacity>
     );
   };
@@ -904,9 +887,9 @@ export default function HomeScreen() {
             <TouchableOpacity onPress={() => setShowWQIChart(false)}>
               <Ionicons name="close" size={24} color={Colors.light.text} />
             </TouchableOpacity>
-          </View>
-            <WQIChartView 
+          </View>            <WQIChartView 
             deviceId={currentDevice?.serverConfig?.deviceId || '111001'}
+            serverEndpoint={CENTRAL_SERVER_ENDPOINT}
           />
         </View>
       </View>

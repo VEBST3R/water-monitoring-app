@@ -1,7 +1,7 @@
 import { CalibrationResponse, DeviceStatusResponse, UserDevice } from '@/types';
 import { useCallback, useEffect, useState } from 'react';
 
-const API_BASE_URL = 'http://192.168.1.104:1880/api'; // Node-RED API endpoints
+const API_BASE_URL = 'http://192.168.1.101:1880/api'; // Node-RED API endpoints
 
 export const useDeviceStatus = (deviceId: string) => {
   const [device, setDevice] = useState<UserDevice | null>(null);

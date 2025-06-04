@@ -12,11 +12,7 @@
     "type": "inject",
     "z": "8cb51d754613f073",
     "name": "Initialize/Reset Simulation",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
+    "props": [{"p": "payload"}],
     "repeat": "",
     "crontab": "",
     "once": true,
@@ -26,18 +22,13 @@
     "payloadType": "bool",
     "x": 600,
     "y": 400,
-    "wires": [
-      [
-        "func-initialize-devices"
-      ]
-    ]
-  },
-  {
+    "wires": [["func-initialize-devices"]]
+  },  {
     "id": "func-initialize-devices",
     "type": "function",
     "z": "8cb51d754613f073",
     "name": "Setup Enhanced Device States & Configs",
-    "func": "// Розширена ініціалізація пристроїв з технічними параметрами\nconst simulationStartTime = Date.now();\nflow.set('simulation_start_time', simulationStartTime);\n\n// Функція розрахунку WQI\nfunction calculateParameterScores(params) {\n    let partial = {};\n    let totalWQI = 0;\n    \n    // pH Score\n    if (params.ph >= 7.0 && params.ph <= 7.6) partial.ph = 25;\n    else if (params.ph >= 6.5 && params.ph <= 8.5) partial.ph = 18;\n    else if (params.ph >= 6.0 && params.ph <= 9.0) partial.ph = 10;\n    else partial.ph = 5;\n    totalWQI += partial.ph;\n    \n    // Temperature Score\n    if (params.temp >= 18 && params.temp <= 22) partial.temp = 25;\n    else if (params.temp >= 15 && params.temp <= 25) partial.temp = 18;\n    else if (params.temp >= 10 && params.temp <= 30) partial.temp = 10;\n    else partial.temp = 5;\n    totalWQI += partial.temp;\n    \n    // TDS Score\n    if (params.tds <= 300) partial.tds = 25;\n    else if (params.tds <= 500) partial.tds = 18;\n    else if (params.tds <= 800) partial.tds = 10;\n    else partial.tds = 5;\n    totalWQI += partial.tds;\n    \n    // Turbidity Score\n    if (params.turbidity <= 1) partial.turbidity = 25;\n    else if (params.turbidity <= 5) partial.turbidity = 18;\n    else if (params.turbidity <= 10) partial.turbidity = 10;\n    else partial.turbidity = 5;\n    totalWQI += partial.turbidity;\n    \n    return { totalWQI: Math.max(0, Math.min(100, totalWQI)), partial: partial };\n}\n\n// Функція форматування часу роботи\nfunction formatOperatingTime(startTime) {\n    const now = Date.now();\n    const diffMs = now - startTime;\n    const hours = Math.floor(diffMs / (1000 * 60 * 60));\n    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));\n    return `${hours} год ${minutes} хв`;\n}\n\n// Початкова конфігурація пристроїв для розширеної симуляції\nconst initialDeviceConfigs = {\n    \"111001\": {\n        id: '111001',\n        name: 'Головний датчик',\n        customName: 'Головний датчик',\n        serverConfig: {\n            deviceId: '111001',\n            serverName: 'Локальний сервер (Node-RED)'\n        },\n        isOnline: true,\n        location: 'Лабораторія',\n        baseline: { ph: 7.2, temp: 20, tds: 300, turbidity: 1.5 },\n        current: { ph: 7.2, temp: 20, tds: 300, turbidity: 1.5, wqi: 0, lastUpdate: Date.now() },\n        technical: {\n            powerSource: \"Від мережі\",\n            powerType: \"mains\",\n            batteryLevel: 100,\n            startTime: simulationStartTime,\n            lastCalibration: new Date('2025-05-15T10:30:00Z').getTime(),\n            calibrationInterval: 30 * 24 * 60 * 60 * 1000,\n            sensorStatus: \"Всі датчики онлайн\",\n            connectionStatus: \"Стабільне\",\n            signalStrength: -35,\n            firmwareVersion: \"v2.1.3\",\n            hardwareVersion: \"v1.4\",\n            sensorHealth: {\n                ph: \"online\",\n                temperature: \"online\",\n                tds: \"online\",\n                turbidity: \"online\"\n            },\n            alerts: []\n        }\n    },\n    \"222002\": {\n        id: '222002',\n        name: 'Резервний модуль',\n        customName: 'Резервний модуль',\n        serverConfig: {\n            deviceId: '222002',\n            serverName: 'Локальний сервер (Node-RED)'\n        },\n        isOnline: true,\n        location: 'Резерв',\n        baseline: { ph: 6.8, temp: 23, tds: 450, turbidity: 3.0 },\n        current: { ph: 6.8, temp: 23, tds: 450, turbidity: 3.0, wqi: 0, lastUpdate: Date.now() },\n        technical: {\n            powerSource: \"Від батареї\",\n            powerType: \"battery\",\n            batteryLevel: 78,\n            startTime: simulationStartTime,\n            lastCalibration: new Date('2025-04-20T14:15:00Z').getTime(),\n            calibrationInterval: 30 * 24 * 60 * 60 * 1000,\n            sensorStatus: \"Всі датчики онлайн\",\n            connectionStatus: \"Стабільне\",\n            signalStrength: -52,\n            firmwareVersion: \"v2.0.8\",\n            hardwareVersion: \"v1.3\",\n            sensorHealth: {\n                ph: \"online\",\n                temperature: \"online\",\n                tds: \"online\",\n                turbidity: \"online\"\n            },\n            alerts: [\n                {\n                    id: \"alert_battery_low\",\n                    type: \"battery_warning\",\n                    severity: \"warning\",\n                    message: \"Рівень батареї нижче 80%\",\n                    timestamp: Date.now() - 3600000,\n                    acknowledged: false\n                }\n            ]\n        }\n    },\n    \"333003\": {\n        id: '333003',\n        name: 'Тестовий стенд',\n        customName: 'Тестовий стенд',\n        serverConfig: {\n            deviceId: '333003',\n            serverName: 'Локальний сервер (Node-RED)'\n        },\n        isOnline: false,\n        location: 'Тестова зона',\n        baseline: { ph: 5.5, temp: 28, tds: 600, turbidity: 7.0 },\n        current: { ph: 5.5, temp: 28, tds: 600, turbidity: 7.0, wqi: 0, lastUpdate: Date.now() },\n        technical: {\n            powerSource: \"Сонячна батарея\",\n            powerType: \"solar\",\n            batteryLevel: 92,\n            startTime: simulationStartTime,\n            lastCalibration: new Date('2025-06-01T09:00:00Z').getTime(),\n            calibrationInterval: 30 * 24 * 60 * 60 * 1000,\n            sensorStatus: \"Попередження: датчик pH потребує калібрування\",\n            connectionStatus: \"Нестабільне\",\n            signalStrength: -67,\n            firmwareVersion: \"v1.9.2\",\n            hardwareVersion: \"v1.2\",\n            sensorHealth: {\n                ph: \"drift_detected\",\n                temperature: \"online\",\n                tds: \"online\",\n                turbidity: \"online\"\n            },\n            alerts: [\n                {\n                    id: \"alert_ph_drift\",\n                    type: \"sensor_drift\",\n                    severity: \"warning\",\n                    message: \"Виявлено дрейф датчика pH\",\n                    parameter: \"pH\",\n                    timestamp: Date.now() - 1800000,\n                    acknowledged: false\n                }\n            ]\n        }\n    }\n};\n\n// Збереження функцій в контекст flow\nflow.set('calculateWQI', calculateParameterScores);\nflow.set('formatOperatingTime', formatOperatingTime);\n\n// Inline Enhanced Simulation (спрощена версія)\nclass SimpleEnhancedSimulation {\n    constructor(initialDeviceConfigs, calculateWQI, formatOperatingTime) {\n        this.devices = JSON.parse(JSON.stringify(initialDeviceConfigs));\n        this.calculateWQI = calculateWQI;\n        this.formatOperatingTime = formatOperatingTime;\n        this.simulationStartTime = Date.now();\n        \n        node.log('🌊 Simple Enhanced Simulation ініціалізовано');\n    }\n    \n    generateDeviceData(device, timestamp) {\n        const baseline = device.baseline;\n        const timeMs = timestamp - this.simulationStartTime;\n        const timeMins = timeMs / (1000 * 60);\n        \n        // Реалістичні флуктуації з синусоїдальними циклами\n        const phVariation = Math.sin(timeMins * 0.1) * 0.3;\n        const tempVariation = Math.cos(timeMins * 0.08) * 1.2;\n        const tdsVariation = Math.sin(timeMins * 0.12) * 50;\n        const turbidityVariation = Math.cos(timeMins * 0.15) * 0.8;\n        \n        // Додаємо шум\n        const noise = () => (Math.random() - 0.5) * 0.1;\n        \n        // Розраховуємо значення з правильним округленням\n        const ph = Math.max(0, Math.min(14, baseline.ph + phVariation + noise()));\n        const temp = Math.max(0, Math.min(40, baseline.temp + tempVariation + noise() * 2));\n        const tds = Math.max(0, Math.min(2000, baseline.tds + tdsVariation + noise() * 10));\n        const turbidity = Math.max(0, Math.min(50, baseline.turbidity + turbidityVariation + noise()));\n        \n        return {\n            ph: Math.round(ph * 100) / 100,              // 2 знаки після коми\n            temp: Math.round(temp * 10) / 10,            // 1 знак після коми  \n            tds: Math.round(tds),                        // цілі числа\n            turbidity: Math.round(turbidity * 10) / 10   // 1 знак після коми\n        };\n    }\n}\n\n// Створення Enhanced simulation\ntry {\n    const enhancedSim = new SimpleEnhancedSimulation(\n        initialDeviceConfigs,\n        calculateParameterScores,\n        formatOperatingTime\n    );\n    \n    flow.set('enhancedSimulation', enhancedSim);\n    node.log('✅ Enhanced simulation (inline) завантажена успішно');\n} catch (error) {\n    node.error('❌ Помилка створення Enhanced simulation: ' + error.message);\n}\n    \n// Ініціалізація пристроїв з базовими значеннями\nconst devices = {};\nfor (const deviceId in initialDeviceConfigs) {\n    if (initialDeviceConfigs.hasOwnProperty(deviceId)) {\n        const config = initialDeviceConfigs[deviceId];\n        devices[deviceId] = {\n            ...config,\n            lastUpdate: new Date(config.current.lastUpdate).toLocaleString('uk-UA')\n        };\n        \n        // Розрахунок початкового WQI\n        const scores = calculateParameterScores(config.current);\n        devices[deviceId].current.wqi = scores.totalWQI;\n        devices[deviceId].current.partial_scores = scores.partial;\n        \n        if (config.technical && config.technical.startTime) {\n            devices[deviceId].technical.operatingTimeFormatted = formatOperatingTime(config.technical.startTime);\n        }\n    }\n}\n    \nflow.set('sim_devices', devices);\n    \nnode.status({ \n    fill: \"green\", \n    shape: \"dot\", \n    text: `✅ Симуляція ініціалізована: ${Object.keys(devices).length} пристроїв` \n});\n    \nnode.log(`✅ Симуляція успішно ініціалізована з ${Object.keys(devices).length} пристроями`);\n\nreturn msg;",
+    "func": "// Розширена ініціалізація пристроїв з технічними параметрами\nconst simulationStartTime = Date.now();\nflow.set('simulation_start_time', simulationStartTime);\n\n// Завантаження коду симуляції\nconst fs = require('fs');\nconst path = require('path');\nconst simulationPath = path.join(__dirname, 'enhanced-simulation.js');\nvar EnhancedWaterSimulation;\n\ntry {\n    const simulationCode = fs.readFileSync(simulationPath, 'utf8');\n    eval(simulationCode);\n    node.log('✅ Код симуляції завантажено');\n} catch (e) {\n    node.error('❌ Помилка завантаження enhanced-simulation.js: ' + e.message);\n    node.status({fill:\"red\", shape:\"dot\", text:\"Помилка симуляції\"});\n    return;\n}\n\n// Функція розрахунку WQI\nfunction calculateParameterScores(params) {\n    let partial = {};\n    let totalWQI = 0;\n    \n    // pH Score\n    if (params.ph >= 7.0 && params.ph <= 7.6) partial.ph = 25;\n    else if (params.ph >= 6.5 && params.ph <= 8.5) partial.ph = 18;\n    else if (params.ph >= 6.0 && params.ph <= 9.0) partial.ph = 10;\n    else partial.ph = 5;\n    totalWQI += partial.ph;\n    \n    // Temperature Score\n    if (params.temp >= 18 && params.temp <= 22) partial.temp = 25;\n    else if (params.temp >= 15 && params.temp <= 25) partial.temp = 18;\n    else if (params.temp >= 10 && params.temp <= 30) partial.temp = 10;\n    else partial.temp = 5;\n    totalWQI += partial.temp;\n    \n    // TDS Score\n    if (params.tds <= 300) partial.tds = 25;\n    else if (params.tds <= 500) partial.tds = 18;\n    else if (params.tds <= 800) partial.tds = 10;\n    else partial.tds = 5;\n    totalWQI += partial.tds;\n    \n    // Turbidity Score\n    if (params.turbidity <= 1) partial.turbidity = 25;\n    else if (params.turbidity <= 5) partial.turbidity = 18;\n    else if (params.turbidity <= 10) partial.turbidity = 10;\n    else partial.turbidity = 5;\n    totalWQI += partial.turbidity;\n    \n    return { totalWQI: Math.max(0, Math.min(100, totalWQI)), partial: partial };\n}\n\n// Функція форматування часу роботи\nfunction formatOperatingTime(startTime) {\n    const now = Date.now();\n    const diffMs = now - startTime;\n    const hours = Math.floor(diffMs / (1000 * 60 * 60));\n    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));\n    return `${hours} год ${minutes} хв`;\n}\n\n// Початкова конфігурація пристроїв для розширеної симуляції\nconst initialDeviceConfigs = {\n    \"111001\": {\n        id: '111001',\n        name: 'Головний датчик',\n        customName: 'Головний датчик',\n        serverConfig: {\n            deviceId: '111001',\n            serverName: 'Локальний сервер (Node-RED)'\n        },\n        isOnline: true,\n        location: 'Лабораторія',\n        baseline: { ph: 7.2, temp: 20, tds: 300, turbidity: 1.5 },\n        current: { ph: 7.2, temp: 20, tds: 300, turbidity: 1.5, wqi: 0, lastUpdate: Date.now() },\n        technical: {\n            powerSource: \"Від мережі\",\n            powerType: \"mains\",\n            batteryLevel: 100,\n            startTime: simulationStartTime,\n            lastCalibration: new Date('2025-05-15T10:30:00Z').getTime(),\n            calibrationInterval: 30 * 24 * 60 * 60 * 1000,\n            sensorStatus: \"Всі датчики онлайн\",\n            connectionStatus: \"Стабільне\",\n            signalStrength: -35,\n            firmwareVersion: \"v2.1.3\",\n            hardwareVersion: \"v1.4\",\n            sensorHealth: {\n                ph: \"online\",\n                temperature: \"online\",\n                tds: \"online\",\n                turbidity: \"online\"\n            },\n            alerts: []\n        }\n    },\n    \"222002\": {\n        id: '222002',\n        name: 'Резервний модуль',\n        customName: 'Резервний модуль',\n        serverConfig: {\n            deviceId: '222002',\n            serverName: 'Локальний сервер (Node-RED)'\n        },\n        isOnline: true,\n        location: 'Резерв',\n        baseline: { ph: 6.8, temp: 23, tds: 450, turbidity: 3.0 },\n        current: { ph: 6.8, temp: 23, tds: 450, turbidity: 3.0, wqi: 0, lastUpdate: Date.now() },\n        technical: {\n            powerSource: \"Від батареї\",\n            powerType: \"battery\",\n            batteryLevel: 78,\n            startTime: simulationStartTime,\n            lastCalibration: new Date('2025-04-20T14:15:00Z').getTime(),\n            calibrationInterval: 30 * 24 * 60 * 60 * 1000,\n            sensorStatus: \"Всі датчики онлайн\",\n            connectionStatus: \"Стабільне\",\n            signalStrength: -52,\n            firmwareVersion: \"v2.0.8\",\n            hardwareVersion: \"v1.3\",\n            sensorHealth: {\n                ph: \"online\",\n                temperature: \"online\",\n                tds: \"online\",\n                turbidity: \"online\"\n            },\n            alerts: [\n                {\n                    id: \"alert_battery_low\",\n                    type: \"battery_warning\",\n                    severity: \"warning\",\n                    message: \"Рівень батареї нижче 80%\",\n                    timestamp: Date.now() - 3600000,\n                    acknowledged: false\n                }\n            ]\n        }\n    },\n    \"333003\": {\n        id: '333003',\n        name: 'Тестовий стенд',\n        customName: 'Тестовий стенд',\n        serverConfig: {\n            deviceId: '333003',\n            serverName: 'Локальний сервер (Node-RED)'\n        },\n        isOnline: false,\n        location: 'Тестова зона',\n        baseline: { ph: 5.5, temp: 28, tds: 600, turbidity: 7.0 },\n        current: { ph: 5.5, temp: 28, tds: 600, turbidity: 7.0, wqi: 0, lastUpdate: Date.now() },\n        technical: {\n            powerSource: \"Сонячна батарея\",\n            powerType: \"solar\",\n            batteryLevel: 92,\n            startTime: simulationStartTime,\n            lastCalibration: new Date('2025-06-01T09:00:00Z').getTime(),\n            calibrationInterval: 30 * 24 * 60 * 60 * 1000,\n            sensorStatus: \"Попередження: датчик pH потребує калібрування\",\n            connectionStatus: \"Нестабільне\",\n            signalStrength: -67,\n            firmwareVersion: \"v1.9.2\",\n            hardwareVersion: \"v1.2\",\n            sensorHealth: {\n                ph: \"drift_detected\",\n                temperature: \"online\",\n                tds: \"online\",\n                turbidity: \"online\"\n            },\n            alerts: [\n                {\n                    id: \"alert_ph_drift\",\n                    type: \"sensor_drift\",\n                    severity: \"warning\",\n                    message: \"Виявлено дрейф датчика pH\",\n                    parameter: \"pH\",\n                    timestamp: Date.now() - 1800000,\n                    acknowledged: false\n                }\n            ]\n        }\n    }\n};\n\n\n// Створення екземпляра розширеної симуляції\ntry {\n    const enhancedSimulation = new EnhancedWaterSimulation(\n        initialDeviceConfigs,\n        calculateParameterScores,\n        formatOperatingTime\n    );\n    \n    // Збереження екземпляра та функцій в контекст flow\n    flow.set('enhancedSimulation', enhancedSimulation);\n    flow.set('calculateWQI', calculateParameterScores);\n    flow.set('formatOperatingTime', formatOperatingTime);\n    \n    // Отримання початкових даних пристроїв з симуляції\n    const devices = enhancedSimulation.getAllDeviceData();\n    \n    // Початкове оновлення форматованих часів\n    for (const deviceId in devices) {\n        if (devices.hasOwnProperty(deviceId)) {\n            const device = devices[deviceId];\n            device.lastUpdate = new Date(device.current.lastUpdate).toLocaleString('uk-UA');\n            if (device.technical && device.technical.startTime) {\n                device.technical.operatingTimeFormatted = formatOperatingTime(device.technical.startTime);\n            }\n        }\n    }\n    \n    flow.set('sim_devices', devices);\n    \n    node.status({ \n        fill: \"green\", \n        shape: \"dot\", \n        text: `✅ Розширена симуляція ініціалізована: ${Object.keys(devices).length} пристроїв` \n    });\n    \n    node.log(`✅ Розширена симуляція успішно ініціалізована з ${Object.keys(devices).length} пристроями`);\n    \n} catch (error) {\n    node.error(`❌ Помилка ініціалізації розширеної симуляції: ${error.message}`);\n    node.status({fill:\"red\", shape:\"dot\", text:\"Помилка ініціалізації\"});\n    return null;\n}\n\nreturn msg;",
     "outputs": 1,
     "timeout": "",
     "noerr": 0,
@@ -46,22 +37,14 @@
     "libs": [],
     "x": 900,
     "y": 400,
-    "wires": [
-      [
-        "debug-init"
-      ]
-    ]
+    "wires": [["debug-init"]]
   },
   {
     "id": "inject-update-tick",
     "type": "inject",
     "z": "8cb51d754613f073",
     "name": "Update Interval (5s)",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
+    "props": [{"p": "payload"}],
     "repeat": "5",
     "crontab": "",
     "once": true,
@@ -71,11 +54,7 @@
     "payloadType": "date",
     "x": 590,
     "y": 480,
-    "wires": [
-      [
-        "func-update-all-device-states"
-      ]
-    ]
+    "wires": [["func-update-all-device-states"]]
   },
   {
     "id": "func-update-all-device-states",
@@ -91,22 +70,14 @@
     "libs": [],
     "x": 880,
     "y": 480,
-    "wires": [
-      [
-        "debug-update"
-      ]
-    ]
+    "wires": [["debug-update"]]
   },
   {
     "id": "inject-save-history-manual",
     "type": "inject",
     "z": "8cb51d754613f073",
     "name": "📊 Зберегти історію ЗАРАЗ",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
+    "props": [{"p": "payload"}],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -116,11 +87,7 @@
     "payloadType": "str",
     "x": 620,
     "y": 1000,
-    "wires": [
-      [
-        "func-prepare-history-save"
-      ]
-    ]
+    "wires": [["func-prepare-history-save"]]
   },
   {
     "id": "inject-save-history-5min",
@@ -128,11 +95,7 @@
     "z": "8cb51d754613f073",
     "d": true,
     "name": "⏰ Автозбереження кожні 5 хв",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
+    "props": [{"p": "payload"}],
     "repeat": "300",
     "crontab": "",
     "once": false,
@@ -142,22 +105,14 @@
     "payloadType": "str",
     "x": 610,
     "y": 1040,
-    "wires": [
-      [
-        "func-prepare-history-save"
-      ]
-    ]
+    "wires": [["func-prepare-history-save"]]
   },
   {
     "id": "inject-save-history-1hour",
     "type": "inject",
     "z": "8cb51d754613f073",
     "name": "⏰ Автозбереження кожну годину",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
+    "props": [{"p": "payload"}],
     "repeat": "5",
     "crontab": "",
     "once": false,
@@ -167,11 +122,7 @@
     "payloadType": "str",
     "x": 630,
     "y": 1080,
-    "wires": [
-      [
-        "func-prepare-history-save"
-      ]
-    ]
+    "wires": [["func-prepare-history-save"]]
   },
   {
     "id": "func-prepare-history-save",
@@ -187,11 +138,7 @@
     "libs": [],
     "x": 920,
     "y": 1040,
-    "wires": [
-      [
-        "func-create-history-requests"
-      ]
-    ]
+    "wires": [["func-create-history-requests"]]
   },
   {
     "id": "func-create-history-requests",
@@ -207,11 +154,7 @@
     "libs": [],
     "x": 1200,
     "y": 1040,
-    "wires": [
-      [
-        "split-history-requests"
-      ]
-    ]
+    "wires": [["split-history-requests"]]
   },
   {
     "id": "split-history-requests",
@@ -226,11 +169,7 @@
     "addname": "",
     "x": 1200,
     "y": 1100,
-    "wires": [
-      [
-        "func-format-single-request"
-      ]
-    ]
+    "wires": [["func-format-single-request"]]
   },
   {
     "id": "func-format-single-request",
@@ -246,11 +185,7 @@
     "libs": [],
     "x": 1200,
     "y": 1160,
-    "wires": [
-      [
-        "http-request-save-history"
-      ]
-    ]
+    "wires": [["http-request-save-history"]]
   },
   {
     "id": "http-request-save-history",
@@ -270,11 +205,7 @@
     "headers": {},
     "x": 1480,
     "y": 1160,
-    "wires": [
-      [
-        "func-process-save-response"
-      ]
-    ]
+    "wires": [["func-process-save-response"]]
   },
   {
     "id": "func-process-save-response",
@@ -290,11 +221,7 @@
     "libs": [],
     "x": 1730,
     "y": 1160,
-    "wires": [
-      [
-        "debug-save-response"
-      ]
-    ]
+    "wires": [["debug-save-response"]]
   },
   {
     "id": "debug-save-response",
@@ -324,11 +251,7 @@
     "swaggerDoc": "",
     "x": 550,
     "y": 580,
-    "wires": [
-      [
-        "func-get-device-data"
-      ]
-    ]
+    "wires": [["func-get-device-data"]]
   },
   {
     "id": "func-get-device-data",
@@ -344,11 +267,7 @@
     "libs": [],
     "x": 900,
     "y": 580,
-    "wires": [
-      [
-        "http-response-dynamic"
-      ]
-    ]
+    "wires": [["http-response-dynamic"]]
   },
   {
     "id": "http-response-dynamic",
@@ -356,10 +275,7 @@
     "z": "8cb51d754613f073",
     "name": "WQI Data Response",
     "statusCode": "",
-    "headers": {
-      "content-type": "application/json",
-      "access-control-allow-origin": "*"
-    },
+    "headers": {"content-type": "application/json", "access-control-allow-origin": "*"},
     "x": 1200,
     "y": 580,
     "wires": []
@@ -375,11 +291,7 @@
     "swaggerDoc": "",
     "x": 580,
     "y": 660,
-    "wires": [
-      [
-        "func-get-device-status"
-      ]
-    ]
+    "wires": [["func-get-device-status"]]
   },
   {
     "id": "func-get-device-status",
@@ -395,11 +307,7 @@
     "libs": [],
     "x": 900,
     "y": 660,
-    "wires": [
-      [
-        "http-response-device-status"
-      ]
-    ]
+    "wires": [["http-response-device-status"]]
   },
   {
     "id": "http-response-device-status",
@@ -407,10 +315,7 @@
     "z": "8cb51d754613f073",
     "name": "Device Status Response",
     "statusCode": "",
-    "headers": {
-      "content-type": "application/json",
-      "access-control-allow-origin": "*"
-    },
+    "headers": {"content-type": "application/json", "access-control-allow-origin": "*"},
     "x": 1210,
     "y": 660,
     "wires": []
@@ -426,11 +331,7 @@
     "swaggerDoc": "",
     "x": 580,
     "y": 740,
-    "wires": [
-      [
-        "func-calibrate-sensors"
-      ]
-    ]
+    "wires": [["func-calibrate-sensors"]]
   },
   {
     "id": "func-calibrate-sensors",
@@ -446,11 +347,7 @@
     "libs": [],
     "x": 900,
     "y": 740,
-    "wires": [
-      [
-        "http-response-calibrate"
-      ]
-    ]
+    "wires": [["http-response-calibrate"]]
   },
   {
     "id": "http-response-calibrate",
@@ -458,10 +355,7 @@
     "z": "8cb51d754613f073",
     "name": "Calibration Response",
     "statusCode": "",
-    "headers": {
-      "content-type": "application/json",
-      "access-control-allow-origin": "*"
-    },
+    "headers": {"content-type": "application/json", "access-control-allow-origin": "*"},
     "x": 1200,
     "y": 740,
     "wires": []
@@ -477,11 +371,7 @@
     "swaggerDoc": "",
     "x": 590,
     "y": 860,
-    "wires": [
-      [
-        "func-list-sensors"
-      ]
-    ]
+    "wires": [["func-list-sensors"]]
   },
   {
     "id": "func-list-sensors",
@@ -497,11 +387,7 @@
     "libs": [],
     "x": 880,
     "y": 860,
-    "wires": [
-      [
-        "http-response-listsensors"
-      ]
-    ]
+    "wires": [["http-response-listsensors"]]
   },
   {
     "id": "http-response-listsensors",
@@ -509,10 +395,7 @@
     "z": "8cb51d754613f073",
     "name": "Sensor List Response",
     "statusCode": "",
-    "headers": {
-      "content-type": "application/json",
-      "access-control-allow-origin": "*"
-    },
+    "headers": {"content-type": "application/json", "access-control-allow-origin": "*"},
     "x": 1200,
     "y": 860,
     "wires": []
@@ -556,11 +439,7 @@
     "type": "inject",
     "z": "8cb51d754613f073",
     "name": "Test Calibration (111001)",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
+    "props": [{"p": "payload"}],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -570,10 +449,6 @@
     "payloadType": "json",
     "x": 590,
     "y": 800,
-    "wires": [
-      [
-        "func-calibrate-sensors"
-      ]
-    ]
+    "wires": [["func-calibrate-sensors"]]
   }
 ]

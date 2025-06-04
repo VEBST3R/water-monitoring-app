@@ -216,22 +216,7 @@ const getWaterQualityAssessment = (parameters: WaterParameters) => {
   // Calculate the WQI using our consistent function
   const wqi = calculateWQI(parameters);
   
-  // Determine overall status based on WQI
-  let overallStatus: 'excellent' | 'good' | 'acceptable' | 'poor' | 'critical';
-  
-  if (wqi >= 80) {
-    overallStatus = 'excellent';
-  } else if (wqi >= 60) {
-    overallStatus = 'good';
-  } else if (wqi >= 40) {
-    overallStatus = 'acceptable';
-  } else if (wqi >= 20) {
-    overallStatus = 'poor';
-  } else {
-    overallStatus = 'critical';
-  }
-  
-  // Still check individual parameters for specific warnings and issues
+  // Check individual parameters first to identify specific problems
   // Перевіряємо pH
   if (parameters.pH !== undefined) {
     if (parameters.pH < 6.0) {
@@ -275,8 +260,44 @@ const getWaterQualityAssessment = (parameters: WaterParameters) => {
       warnings.push('Злегка каламутна вода (> 1 NTU)');
     }
   }
+
+  // Determine overall status based on both WQI AND individual parameter issues
+  let overallStatus: 'excellent' | 'good' | 'acceptable' | 'poor' | 'critical';
   
-  // Формуємо повідомлення та колір
+  // If there are critical issues with parameters, override WQI-based status
+  if (issues.length > 0) {
+    // Critical problems detected
+    if (wqi < 20) {
+      overallStatus = 'critical';
+    } else if (wqi < 40) {
+      overallStatus = 'poor';
+    } else {
+      overallStatus = 'poor'; // Even if WQI is higher, critical parameter issues make it poor
+    }
+  } else if (warnings.length > 0) {
+    // Only warnings, no critical issues
+    if (wqi >= 60) {
+      overallStatus = 'acceptable'; // Downgrade from good/excellent due to warnings
+    } else if (wqi >= 40) {
+      overallStatus = 'acceptable';
+    } else {
+      overallStatus = 'poor';
+    }
+  } else {
+    // No issues or warnings, use WQI-based status
+    if (wqi >= 80) {
+      overallStatus = 'excellent';
+    } else if (wqi >= 60) {
+      overallStatus = 'good';
+    } else if (wqi >= 40) {
+      overallStatus = 'acceptable';
+    } else if (wqi >= 20) {
+      overallStatus = 'poor';
+    } else {
+      overallStatus = 'critical';
+    }
+  }
+    // Формуємо повідомлення та колір на основі фактичного стану
   let message = '';
   let statusColor = '';
   let statusIcon = '';
@@ -293,12 +314,20 @@ const getWaterQualityAssessment = (parameters: WaterParameters) => {
       statusIcon = 'checkmark-circle-outline';
       break;
     case 'acceptable':
-      message = 'Прийнятна якість води. Рекомендується контроль параметрів.';
+      if (warnings.length > 0) {
+        message = 'Прийнятна якість води. Виявлено попередження.';
+      } else {
+        message = 'Прийнятна якість води. Рекомендується контроль параметрів.';
+      }
       statusColor = '#FF9800';
       statusIcon = 'warning-outline';
       break;
     case 'poor':
-      message = 'Погана якість води. Необхідне втручання.';
+      if (issues.length > 0) {
+        message = 'Погана якість води. Виявлено критичні проблеми!';
+      } else {
+        message = 'Погана якість води. Необхідне втручання.';
+      }
       statusColor = '#FF5722';
       statusIcon = 'alert-circle-outline';
       break;
@@ -319,9 +348,8 @@ const getWaterQualityAssessment = (parameters: WaterParameters) => {
   };
 };
 
-const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ parameters, onRefresh, deviceId = '111001' }) => {
-  const [refreshing, setRefreshing] = useState(false);
-  // Update the type definition to correctly use arrays
+const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ parameters, onRefresh, deviceId = '111001' }) => {  const [refreshing, setRefreshing] = useState(false);
+  // Зберігаємо історичні дані для кожного параметра (тепер з сервера)
   const [historicalData, setHistoricalData] = useState<Record<string, { timestamp: number; value: number }[]>>({});
   const [loadingHistory, setLoadingHistory] = useState(false);
   
@@ -341,7 +369,7 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
   const fetchParameterHistory = async (parameterType: string) => {
     try {
       const response = await fetch(
-        `http://192.168.1.104:1880/api/getParameterHistory?device=${deviceId}&parameter=${parameterType}&hours=24`
+        `http://192.168.1.101:1880/api/getParameterHistory?device=${deviceId}&parameter=${parameterType}&hours=24`
       );
       
       if (response.ok) {
@@ -358,9 +386,8 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
   useEffect(() => {
     const loadAllHistory = async () => {
       if (!parameters) return;
-      
-      setLoadingHistory(true);
-      const paramKeys = ['pH', 'temperature', 'tds', 'turbidity'];
+        setLoadingHistory(true);
+      const paramKeys = ['ph', 'temperature', 'tds', 'turbidity'];
       const historyPromises = paramKeys.map(async (paramKey) => {
         const history = await fetchParameterHistory(paramKey);
         return { paramKey, history };
@@ -368,13 +395,15 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
       
       try {
         const results = await Promise.all(historyPromises);
-        const newHistoricalData: Record<string, { timestamp: number; value: number }[]> = {};
-        
-        results.forEach(({ paramKey, history }) => {
-          newHistoricalData[paramKey] = history;
+        const newHistoricalData: Record<string, { timestamp: number; value: number }[]> = {};        results.forEach(({ paramKey, history }) => {
+          // Конвертуємо назад 'ph' в 'pH' для відображення
+          const displayKey = paramKey === 'ph' ? 'pH' : paramKey;
+          newHistoricalData[displayKey] = history;
+          console.log(`📊 Завантажено історію для ${displayKey}:`, history.length, 'точок');
         });
         
         setHistoricalData(newHistoricalData);
+        console.log('📊 Всі історичні дані завантажено:', newHistoricalData);
       } catch (error) {
         console.warn('Failed to load historical data:', error);
       } finally {
@@ -398,65 +427,24 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
       }
     }
   };
-
   // Функція для відкриття розширеної діаграми
   const openExpandedChart = (config: any, parameterConfig: any, chartData: any) => {
-    // Якщо відкриваємо WQI, формуємо спеціальні метадані
-    if (config.key === 'wqi') {
-      setExpandedChart({
-        isVisible: true,
-        parameterKey: 'wqi',
-        parameterLabel: 'WQI',
-        parameterDescription: 'Індекс якості води (Water Quality Index)',
-        color: Colors.light.tint,
-        unit: '',
-        optimalRange: '80-100',
-        icon: 'analytics-outline',
-        data: wqiHistory // історія WQI, яку треба отримати нижче
-      });
-    } else {
-      setExpandedChart({
-        isVisible: true,
-        parameterKey: config.key,
-        parameterLabel: config.label,
-        parameterDescription: config.description,
-        color: parameterConfig.color,
-        unit: parameterConfig.unit,
-        optimalRange: parameterConfig.optimalRange,
-        icon: parameterConfig.icon,
-        data: chartData
-      });
-    }
+    setExpandedChart({
+      isVisible: true,
+      parameterKey: config.key,
+      parameterLabel: config.label,
+      parameterDescription: config.description,
+      color: parameterConfig.color,
+      unit: parameterConfig.unit,
+      optimalRange: parameterConfig.optimalRange,
+      icon: parameterConfig.icon,
+      data: chartData
+    });
   };
-
   // Функція для закриття розширеної діаграми
   const closeExpandedChart = () => {
     setExpandedChart(null);
   };
-
-  // Додаємо стан для історії WQI
-  const [wqiHistory, setWqiHistory] = useState<{ timestamp: number; value: number }[]>([]);
-
-  // Завантаження історії WQI (аналогічно параметрам)
-  useEffect(() => {
-    const fetchWQIHistory = async () => {
-      try {
-        const response = await fetch(
-          `http://192.168.1.104:1880/api/getParameterHistory?device=${deviceId}&parameter=wqi&hours=24`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          // Очікуємо масив з {timestamp, value}
-          setWqiHistory(Array.isArray(data.data) ? data.data : []);
-        } else {
-          setWqiHistory([]);
-        }
-      } catch (e) {
-        setWqiHistory([]);
-      }
-    };
-    fetchWQIHistory();
-  }, [deviceId]);
 
   if (!parameters) {
     return (
@@ -480,11 +468,8 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
         </ScrollView>
       </View>
     );
-  }
-
-  // Додаємо WQI-картку до списку параметрів для відображення
+  }  // Параметри для відображення (без WQI, оскільки він вже є в головному меню)
   const paramConfigs = [
-    // { key: 'wqi', label: 'WQI', description: 'Індекс якості води' }, // WQI прибрано з меню параметрів
     { key: 'pH', label: 'Рівень pH', description: 'Кислотність води' },
     { key: 'temperature', label: 'Температура', description: 'Температура води' },
     { key: 'tds', label: 'Загальні розчинені речовини', description: 'Концентрація TDS' },
@@ -506,42 +491,43 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
           />
         }
       >
-        <ThemedText type="title" style={styles.title}>Параметри якості води</ThemedText>
-          {paramConfigs.map(config => {
-            let value = config.key === 'wqi' ? (parameters.wqi ?? null) : parameters[config.key];
+        <ThemedText type="title" style={styles.title}>Параметри якості води</ThemedText>        {paramConfigs.map(config => {
+            let value = parameters[config.key];
             let numericValue = typeof value === 'number' ? value : undefined;
-            let chartDataRaw = config.key === 'wqi' ? wqiHistory : (historicalData[config.key] || []);
-            // Для WQI: фільтруємо тільки валідні числові значення
+            let chartDataRaw = historicalData[config.key] || [];
+            // Фільтруємо тільки валідні числові значення
             let chartData = Array.isArray(chartDataRaw)
               ? chartDataRaw.filter(d => typeof d.value === 'number' && !isNaN(d.value))
               : [];
-            let color = config.key === 'wqi' ? Colors.light.tint : getParameterDisplayConfig(config.key, numericValue).color;
-            let unit = config.key === 'wqi' ? '' : getParameterDisplayConfig(config.key, numericValue).unit;
-            let icon = config.key === 'wqi' ? 'analytics-outline' : getParameterDisplayConfig(config.key, numericValue).icon;
-            let optimalRange = config.key === 'wqi' ? '80-100' : getParameterDisplayConfig(config.key, numericValue).optimalRange;
-            let reason = config.key === 'wqi' ? undefined : getParameterDisplayConfig(config.key, numericValue).reason;
-            let displayValue = config.key === 'wqi' ? (typeof value === 'number' ? value.toFixed(0) : 'N/A') : getParameterDisplayConfig(config.key, numericValue).displayValue;
-            return (
-              <TouchableOpacity 
+            let { color, unit, optimalRange, icon, reason, displayValue } = getParameterDisplayConfig(config.key, numericValue);
+            return (              <TouchableOpacity 
                 key={config.key} 
                 style={styles.parameterCard}
-                onPress={() => Array.isArray(chartData) && chartData.length > 0 && openExpandedChart(config, { color, unit, optimalRange, icon }, chartData)}
-                activeOpacity={Array.isArray(chartData) && chartData.length > 0 ? 0.7 : 1}
+                onPress={() => {
+                  if (Array.isArray(chartData) && chartData.length > 0) {
+                    openExpandedChart(config, { color, unit, optimalRange, icon }, chartData);
+                  } else {
+                    // Створюємо фіктивні дані для демонстрації
+                    const dummyData = [{
+                      timestamp: Date.now(),
+                      value: typeof value === 'number' ? value : 0
+                    }];
+                    openExpandedChart(config, { color, unit, optimalRange, icon }, dummyData);
+                  }
+                }}
+                activeOpacity={0.7}
               >
                 <View style={styles.cardHeader}>
-                  <Ionicons name={icon as any} size={24} color={color} />
-                  <View style={styles.headerText}>
+                  <Ionicons name={icon as any} size={24} color={color} />                  <View style={styles.headerText}>
                     <ThemedText type="subtitle" style={styles.cardTitle}>{config.label}</ThemedText>
                     <ThemedText style={styles.cardDescription}>{config.description}</ThemedText>
                   </View>
-                  {Array.isArray(chartData) && chartData.length > 0 && (
-                    <Ionicons 
-                      name="chevron-forward-outline" 
-                      size={20} 
-                      color={Colors.light.tabIconDefault} 
-                      style={styles.expandIcon}
-                    />
-                  )}
+                  <Ionicons 
+                    name="chevron-forward-outline" 
+                    size={20} 
+                    color={Colors.light.tabIconDefault} 
+                    style={styles.expandIcon}
+                  />
                 </View>
                 <View style={styles.cardContent}>
                   <View style={styles.valueSection}>
@@ -557,24 +543,52 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
                     <View style={styles.infoRow}>
                       <Ionicons name="checkmark-circle-outline" size={16} color={Colors.light.tabIconDefault} />
                       <ThemedText style={styles.optimalText}>Оптимально: {optimalRange}</ThemedText>
-                    </View>
-                  </View>
-                  {Array.isArray(chartData) && chartData.length > 0 && !loadingHistory && (
-                    <View style={styles.chartSection}>
-                      <ThemedText style={styles.chartLabel}>Динаміка (24 год)</ThemedText>
-                      <MiniChart 
-                        data={chartData}
-                        color={color}
-                        width={screenWidth * 0.35}
-                        height={60}
-                      />
-                    </View>
-                  )}
-                  {loadingHistory && (
-                    <View style={styles.chartSection}>
-                      <ThemedText style={styles.chartLabel}>Завантаження історії...</ThemedText>
-                      <View style={[styles.chartPlaceholder, { borderColor: color }]} />
-                    </View>                )}
+                    </View>                  </View>
+                  {/* Додаємо дебагінг та показуємо міні-діаграму або плейсхолдер */}
+                  {(() => {
+                    console.log(`🔍 Дебагінг для ${config.key}:`, {
+                      hasHistoricalData: !!historicalData[config.key],
+                      dataLength: chartData?.length || 0,
+                      loadingHistory,
+                      isArray: Array.isArray(chartData)
+                    });
+                    
+                    if (loadingHistory) {
+                      return (
+                        <View style={styles.chartSection}>
+                          <ThemedText style={styles.chartLabel}>Завантаження...</ThemedText>
+                          <View style={[styles.chartPlaceholder, { borderColor: color }]} />
+                        </View>
+                      );
+                    }
+                    
+                    if (Array.isArray(chartData) && chartData.length > 0) {
+                      return (
+                        <View style={styles.chartSection}>
+                          <ThemedText style={styles.chartLabel}>Динаміка (24 год)</ThemedText>
+                          <MiniChart 
+                            data={chartData}
+                            color={color}
+                            width={screenWidth * 0.35}
+                            height={60}
+                          />
+                        </View>
+                      );
+                    } else {
+                      // Показуємо плейсхолдер якщо немає даних
+                      return (
+                        <View style={styles.chartSection}>
+                          <ThemedText style={styles.chartLabel}>Історія відсутня</ThemedText>
+                          <View style={[styles.chartPlaceholder, { borderColor: color }]}>
+                            <Ionicons name="analytics-outline" size={24} color={color} />
+                            <ThemedText style={{ fontSize: 10, color: '#aaa', textAlign: 'center' }}>
+                              Дані будуть доступні після збору статистики
+                            </ThemedText>
+                          </View>
+                        </View>
+                      );
+                    }
+                  })()}
                 </View>
               </TouchableOpacity>
             );

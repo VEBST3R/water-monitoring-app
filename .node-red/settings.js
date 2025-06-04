@@ -40,8 +40,23 @@ module.exports = {
         default: {
             module: "memory"
         }
+    },    functionGlobalContext: {
+        // Приклади:
+        // os:require('os'),
+        // moment:require('moment')
+        fs: require('fs'),      // Додайте цей рядок
+        path: require('path'),   // Додайте цей рядок
+        // Load the Enhanced Simulation Loader
+        loadEnhancedSimulation: function() {
+            try {
+                require('./enhanced-simulation-loader.js');
+                return global.loadEnhancedSimulation;
+            } catch (error) {
+                console.error('❌ Помилка завантаження Enhanced Simulation Loader:', error.message);
+                return null;
+            }
+        }
     },
-    
     // Налаштування редактора
     editorTheme: {
         projects: {
