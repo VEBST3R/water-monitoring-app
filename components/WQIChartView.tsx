@@ -26,9 +26,10 @@ interface WaterParameters {
 interface WQIChartViewProps {
   deviceId: string;
   serverEndpoint?: string; // Додаємо пропс для сервера
+  isDarkMode?: boolean; // Додаємо підтримку темної теми
 }
 
-const WQIChartView: React.FC<WQIChartViewProps> = ({ deviceId, serverEndpoint = '192.168.1.101:1880' }) => {
+const WQIChartView: React.FC<WQIChartViewProps> = ({ deviceId, serverEndpoint = '192.168.1.101:1880', isDarkMode = false }) => {
   const [wqiData, setWqiData] = useState<WQIDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -189,14 +190,13 @@ const WQIChartView: React.FC<WQIChartViewProps> = ({ deviceId, serverEndpoint = 
       hour: '2-digit', 
       minute: '2-digit' 
     });
-  };
-  const chartConfig = {
-    backgroundColor: Colors.light.background,
-    backgroundGradientFrom: Colors.light.background,
-    backgroundGradientTo: Colors.light.background,
+  };  const chartConfig = {
+    backgroundColor: isDarkMode ? '#1e293b' : Colors.light.background,
+    backgroundGradientFrom: isDarkMode ? '#1e293b' : Colors.light.background,
+    backgroundGradientTo: isDarkMode ? '#1e293b' : Colors.light.background,
     decimalPlaces: 0,
     color: (opacity = 1) => getWaterQualityColor(currentWQI),
-    labelColor: (opacity = 1) => Colors.light.text,
+    labelColor: (opacity = 1) => isDarkMode ? '#94a3b8' : Colors.light.text,
     style: {
       borderRadius: 0,
     },
@@ -207,8 +207,8 @@ const WQIChartView: React.FC<WQIChartViewProps> = ({ deviceId, serverEndpoint = 
     },
     propsForBackgroundLines: {
       strokeDasharray: "5,5",
-      stroke: Colors.light.tabIconDefault,
-      strokeOpacity: 0.3
+      stroke: isDarkMode ? '#475569' : Colors.light.tabIconDefault,
+      strokeOpacity: isDarkMode ? 0.5 : 0.3
     },
     paddingRight: 30,
   };

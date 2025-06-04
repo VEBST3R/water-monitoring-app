@@ -191,8 +191,7 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
                   <ClipPath id="chartClip">
                     <Rect x="0" y="0" width={CHART_WIDTH} height={CHART_HEIGHT} />
                   </ClipPath>
-                </Defs>
-                {/* Фонова сітка */}
+                </Defs>                {/* Фонова сітка */}
                 {[0.25, 0.5, 0.75].map((ratio, index) => (
                   <Line
                     key={index}
@@ -200,13 +199,12 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
                     y1={CHART_HEIGHT * ratio}
                     x2={CHART_WIDTH}
                     y2={CHART_HEIGHT * ratio}
-                    stroke="rgba(0,0,0,0.1)"
+                    stroke="rgba(0,0,0,0.2)"
                     strokeWidth="1"
                     strokeDasharray="5,5"
                   />
                 ))}
-                
-                {/* Вертикальні лінії сітки */}
+                  {/* Вертикальні лінії сітки */}
                 {[0.2, 0.4, 0.6, 0.8].map((ratio, index) => (
                   <Line
                     key={`v-${index}`}
@@ -214,11 +212,11 @@ const ExpandedParameterChart: React.FC<ExpandedParameterChartProps> = ({
                     y1="0"
                     x2={CHART_WIDTH * ratio}
                     y2={CHART_HEIGHT}
-                    stroke="rgba(0,0,0,0.05)"
+                    stroke="rgba(0,0,0,0.1)"
                     strokeWidth="1"
                     strokeDasharray="3,3"
                   />
-                ))}                {/* Основна лінія графіка */}
+                ))}{/* Основна лінія графіка */}
                 <G clipPath="url(#chartClip)">
                   <Polyline
                     points={polylinePoints}

@@ -90,26 +90,25 @@ const MiniChart: React.FC<{
         <ClipPath id={clipId}>
           <Rect x="0" y="0" width={width} height={height} />
         </ClipPath>
-      </Defs>
-      {/* Фонова сітка */}
+      </Defs>      {/* Фонова сітка */}
       <Polyline
         points={`0,${height/4} ${width},${height/4}`}
         fill="none"
-        stroke="rgba(0,0,0,0.1)"
+        stroke="rgba(0,0,0,0.2)"
         strokeWidth="0.5"
         strokeDasharray="2,2"
       />
       <Polyline
         points={`0,${height/2} ${width},${height/2}`}
         fill="none"
-        stroke="rgba(0,0,0,0.15)"
+        stroke="rgba(0,0,0,0.25)"
         strokeWidth="0.5"
         strokeDasharray="2,2"
       />
       <Polyline
         points={`0,${height*3/4} ${width},${height*3/4}`}
         fill="none"
-        stroke="rgba(0,0,0,0.1)"
+        stroke="rgba(0,0,0,0.2)"
         strokeWidth="0.5"
         strokeDasharray="2,2"
       />      

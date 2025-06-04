@@ -10,6 +10,7 @@ import ScoreCircle from '@/components/ScoreCircle';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import WaveAnimation from '@/components/WaveAnimation';
+import WebDashboard from '@/components/web/WebDashboard';
 import WQIChartView from '@/components/WQIChartView';
 import { Colors } from '@/constants/Colors';
 import { UserDevice } from '@/types';
@@ -30,7 +31,7 @@ const formatTime = (seconds: number) => {
 };
 
 export default function HomeScreen() {
-  // State variables
+  // State variables (shared between mobile and web)
   const [userDevices, setUserDevices] = useState<UserDevice[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
   const [score, setScore] = useState(0); 
@@ -41,12 +42,16 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true); 
   const [isAddDeviceModalVisible, setAddDeviceModalVisible] = useState(false);
   const [newUserDeviceName, setNewUserDeviceName] = useState('');
-  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error' | 'loading'>('disconnected');
+  const [newPhysicalDeviceId, setNewPhysicalDeviceId] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error' | 'loading'>('disconnected');
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [nextUpdateTimer, setNextUpdateTimer] = useState(0);
   const [showWQIChart, setShowWQIChart] = useState(false);
   
-  // Shared values for animations
+  // Check if running on web platform
+  const isWeb = Platform.OS === 'web';
+  
+  // Shared values for animations (mobile only)
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   
@@ -705,12 +710,29 @@ export default function HomeScreen() {
         }
       ]
     );
-  };
-
-  // Додаємо визначення combinedGesture, яке було видалено
+  };  // Додаємо визначення combinedGesture, яке було видалено
   const combinedGesture = showDeviceSelectionView 
     ? verticalSwipeGesture // Only allow vertical swipes when device selection is shown
     : Gesture.Race(panGesture, verticalSwipeGesture); // Normal gesture handling
+  
+  // If web platform, show the WebDashboard
+  if (isWeb) {
+    return (
+      <WebDashboard
+        userDevices={userDevices}
+        currentDeviceIndex={currentDeviceIndex}
+        score={score}
+        detailedParams={detailedParams}
+        connectionStatus={connectionStatus}
+        lastUpdateTimestamp={lastUpdateTimestamp}
+        onDeviceChange={setCurrentDeviceIndex}
+        onAddDevice={handleAddDevice}
+        onDeleteDevice={handleDeleteDevice}
+        onDevicesUpdate={setUserDevices}
+        updateCurrentDeviceData={updateCurrentDeviceData}
+      />
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.light.background }}>
@@ -1224,10 +1246,56 @@ const styles = StyleSheet.create({
   wqiProgressLabel: {
     fontSize: 10,
     color: Colors.light.tabIconDefault,
-  },
-  wqiChartCardSubtitle: {
+  },  wqiChartCardSubtitle: {
     fontSize: 12,
     color: Colors.light.tabIconDefault,
+    textAlign: 'center',
+  },
+});
+
+// Web styles for modern web interface
+const webStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  header: {
+    backgroundColor: '#007AFF',
+    padding: 40,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 18,
+    color: '#e3f2fd',
+  },
+  content: {
+    flex: 1,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 40,
+    maxWidth: 600,
+  },
+  cardTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  cardText: {
+    fontSize: 16,
+    color: '#64748b',
     textAlign: 'center',
   },
 });
