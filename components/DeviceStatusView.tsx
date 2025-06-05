@@ -26,6 +26,8 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device, isDarkMode 
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   
+  const colors = isDarkMode ? Colors.dark : Colors.light;
+  
   const deviceId = device?.serverConfig?.deviceId || '111001';
   console.log('🔍 DeviceStatusView rendered with deviceId:', deviceId, 'device:', device);
   
@@ -157,7 +159,7 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device, isDarkMode 
         <Ionicons name="alert-circle-outline" size={50} color="#FF6B6B" />
         <ThemedText style={[styles.errorText, isDarkMode && { color: Colors.dark.text }]}>Помилка завантаження даних</ThemedText>
         <TouchableOpacity style={[styles.retryButton, isDarkMode && { backgroundColor: Colors.dark.tint }]} onPress={refreshData}>
-          <ThemedText style={styles.retryButtonText}>Спробувати знову</ThemedText>
+          <ThemedText style={[styles.retryButtonText, { color: colors.background }]}>Спробувати знову</ThemedText>
         </TouchableOpacity>
       </View>
     );
@@ -434,30 +436,29 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device, isDarkMode 
         transparent={true}
         animationType="fade"
         onRequestClose={() => setShowCalibrationDialog(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, isDarkMode && { backgroundColor: '#1f2937' }]}>
-            <ThemedText style={[styles.modalTitle, isDarkMode && { color: Colors.dark.text }]}>
+      >        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            <ThemedText style={[styles.modalTitle, { color: colors.text }]}>
               Калібрування датчиків
             </ThemedText>
-            <ThemedText style={[styles.modalMessage, isDarkMode && { color: Colors.dark.text }]}>
+            <ThemedText style={[styles.modalMessage, { color: colors.text }]}>
               Ви впевнені, що хочете запустити калібрування всіх датчиків? Це може зайняти кілька хвилин.
             </ThemedText>
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
+                style={[styles.modalButton, styles.cancelButton, isDarkMode && { backgroundColor: colors.tabIconDefault }]}
                 onPress={() => setShowCalibrationDialog(false)}
               >
-                <ThemedText style={styles.cancelButtonText}>Скасувати</ThemedText>
+                <ThemedText style={[styles.cancelButtonText, { color: isDarkMode ? colors.background : '#666' }]}>Скасувати</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton, isDarkMode && { backgroundColor: Colors.dark.tint }]}
+                style={[styles.modalButton, styles.confirmButton, { backgroundColor: colors.tint }]}
                 onPress={() => {
                   setShowCalibrationDialog(false);
                   performCalibration();
                 }}
               >
-                <ThemedText style={styles.confirmButtonText}>Калібрувати</ThemedText>
+                <ThemedText style={[styles.confirmButtonText, { color: colors.background }]}>Калібрувати</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
   },
   infoCard: {
-    backgroundColor: Colors.light.background, 
+    backgroundColor: 'white', 
     borderRadius: 15,
     padding: 20,
     marginBottom: 20,
@@ -588,9 +589,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     marginTop: 10,
-  },
-  retryButtonText: {
-    color: 'white',
+  },  retryButtonText: {
+    color: 'white', // Will be overridden dynamically
     fontWeight: '600',
   },
   // Modal styles

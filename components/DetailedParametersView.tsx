@@ -28,6 +28,7 @@ interface DetailedParametersViewProps {
   parameters: WaterParameters | null;
   onRefresh?: () => void;
   deviceId?: string; // Додаємо deviceId для API викликів
+  isDarkMode?: boolean; // Added for theme support
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -37,19 +38,22 @@ const MiniChart: React.FC<{
   data: { timestamp: number; value: number }[]; 
   color: string; 
   width: number; 
-  height: number 
-}> = ({ data, color, width, height }) => {
+  height: number;
+  isDarkMode?: boolean;
+}> = ({ data, color, width, height, isDarkMode = false }) => {
+  const textColor = isDarkMode ? Colors.dark.tabIconDefault : Colors.light.tabIconDefault;
+  
   if (!data || data.length === 0) {
     return (
       <View style={[styles.chartContainer, { width, height, justifyContent: 'center', alignItems: 'center' }]}> 
-        <ThemedText style={{ fontSize: 12, color: '#aaa', textAlign: 'center' }}>Дані недоступні</ThemedText>
+        <ThemedText style={{ fontSize: 12, color: textColor, textAlign: 'center' }}>Дані недоступні</ThemedText>
       </View>
     );
   }
   if (data.length < 2) {
     return (
       <View style={[styles.chartContainer, { width, height, justifyContent: 'center', alignItems: 'center' }]}> 
-        <ThemedText style={{ fontSize: 12, color: '#aaa', textAlign: 'center' }}>Недостатньо даних для графіка</ThemedText>
+        <ThemedText style={{ fontSize: 12, color: textColor, textAlign: 'center' }}>Недостатньо даних для графіка</ThemedText>
       </View>
     );
   }
@@ -60,11 +64,10 @@ const MiniChart: React.FC<{
   // Унікальний ID для клипування
   const clipId = `miniChartClip-${Math.random().toString(36).substr(2, 9)}`;
   // Якщо всі значення однакові або дуже близькі, створюємо штучний діапазон
-  if (range < 0.01) {
-    if (maxValue === minValue && data.length > 2) {
+  if (range < 0.01) {    if (maxValue === minValue && data.length > 2) {
       return (
         <View style={[styles.chartContainer, { width, height, justifyContent: 'center', alignItems: 'center' }]}> 
-          <ThemedText style={{ fontSize: 12, color: '#aaa', textAlign: 'center' }}>Дані стабільні (без змін)</ThemedText>
+          <ThemedText style={{ fontSize: 12, color: textColor, textAlign: 'center' }}>Дані стабільні (без змін)</ThemedText>
         </View>
       );
     }
@@ -347,7 +350,14 @@ const getWaterQualityAssessment = (parameters: WaterParameters) => {
   };
 };
 
-const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ parameters, onRefresh, deviceId = '111001' }) => {  const [refreshing, setRefreshing] = useState(false);
+const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ 
+  parameters, 
+  onRefresh, 
+  deviceId = '111001', 
+  isDarkMode = false 
+}) => {
+  const colors = isDarkMode ? Colors.dark : Colors.light;
+  const [refreshing, setRefreshing] = useState(false);
   // Зберігаємо історичні дані для кожного параметра (тепер з сервера)
   const [historicalData, setHistoricalData] = useState<Record<string, { timestamp: number; value: number }[]>>({});
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -444,53 +454,53 @@ const DetailedParametersView: React.FC<DetailedParametersViewProps> = ({ paramet
   const closeExpandedChart = () => {
     setExpandedChart(null);
   };
-
   if (!parameters) {
     return (
-      <View style={styles.outerContainer}>        <ScrollView 
+      <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>        
+        <ScrollView 
           contentContainerStyle={[styles.scrollContentContainer, styles.centered]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              colors={[Colors.light.tint]}
-              tintColor={Colors.light.tint}
+              colors={[colors.tint]}
+              tintColor={colors.tint}
               enabled={!expandedChart?.isVisible}
             />
           }
         >
-          <Ionicons name="water-outline" size={64} color={Colors.light.tabIconDefault} />
-          <ThemedText style={styles.noDataText}>Детальні параметри недоступні</ThemedText>
-          <ThemedText style={styles.noDataSubtext}>
+          <Ionicons name="water-outline" size={64} color={colors.tabIconDefault} />
+          <ThemedText style={[styles.noDataText, { color: colors.text }]}>Детальні параметри недоступні</ThemedText>
+          <ThemedText style={[styles.noDataSubtext, { color: colors.tabIconDefault }]}>
             Потягніть вниз для оновлення
           </ThemedText>
         </ScrollView>
       </View>
     );
-  }  // Параметри для відображення (без WQI, оскільки він вже є в головному меню)
+  }// Параметри для відображення (без WQI, оскільки він вже є в головному меню)
   const paramConfigs = [
     { key: 'pH', label: 'Рівень pH', description: 'Кислотність води' },
     { key: 'temperature', label: 'Температура', description: 'Температура води' },
     { key: 'tds', label: 'Загальні розчинені речовини', description: 'Концентрація TDS' },
     { key: 'turbidity', label: 'Каламутність', description: 'Прозорість води' },
   ];
-
   return (
-    <View style={styles.outerContainer}>
+    <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContentContainer}
-        showsVerticalScrollIndicator={false}        refreshControl={
+        showsVerticalScrollIndicator={false}        
+        refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[Colors.light.tint]}
-            tintColor={Colors.light.tint}
+            colors={[colors.tint]}
+            tintColor={colors.tint}
             enabled={!expandedChart?.isVisible}
           />
         }
       >
-        <ThemedText type="title" style={styles.title}>Параметри якості води</ThemedText>        {paramConfigs.map(config => {
+        <ThemedText type="title" style={[styles.title, { color: colors.text }]}>Параметри якості води</ThemedText>{paramConfigs.map(config => {
             let value = parameters[config.key];
             let numericValue = typeof value === 'number' ? value : undefined;
             let chartDataRaw = historicalData[config.key] || [];

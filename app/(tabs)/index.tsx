@@ -14,6 +14,7 @@ import WaveAnimation from '@/components/WaveAnimation';
 import WebDashboard from '@/components/web/WebDashboard';
 import WQIChartView from '@/components/WQIChartView';
 import { Colors } from '@/constants/Colors';
+import { useTheme } from '@/contexts/ThemeContext';
 import { UserDevice } from '@/types';
 import { getWaterQualityColor } from '@/utils/colorUtils';
 import { calculateWQI } from '@/utils/wqiUtils';
@@ -31,6 +32,10 @@ const formatTime = (seconds: number) => {
 };
 
 export default function HomeScreen() {
+  // Theme context
+  const { isDarkMode, toggleTheme } = useTheme();
+  const colors = isDarkMode ? Colors.dark : Colors.light;
+  
   // State variables (shared between mobile and web)
   const [userDevices, setUserDevices] = useState<UserDevice[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
@@ -541,22 +546,20 @@ export default function HomeScreen() {
       zIndex: 150, // Same zIndex as detailed view, or higher if it should overlap
     };
   });
-
   if (isLoading) {
     return (
-      <ThemedView style={styles.loadingContainer}> 
-        <ActivityIndicator size="large" color={Colors.light.tint} />
-        <ThemedText style={styles.loadingText}>Завантаження пристроїв...</ThemedText> 
+      <ThemedView style={[styles.loadingContainer, { backgroundColor: colors.background }]}> 
+        <ActivityIndicator size="large" color={colors.tint} />
+        <ThemedText style={[styles.loadingText, { color: colors.text }]}>Завантаження пристроїв...</ThemedText> 
       </ThemedView>
     );
-  }  const renderInfoCards = () => {
-    if (!currentDevice && userDevices.length === 0) {
+  }const renderInfoCards = () => {    if (!currentDevice && userDevices.length === 0) {
       return (
-        <View style={styles.infoCard}>
-          <Ionicons name="water-outline" size={24} color={Colors.light.tint} />
+        <View style={[styles.infoCard, { backgroundColor: colors.background, borderLeftColor: colors.tint }]}>
+          <Ionicons name="water-outline" size={24} color={colors.tint} />
           <View style={styles.cardTextContainer}>
-            <ThemedText style={styles.cardTitle}>Моніторинг якості води</ThemedText>
-            <ThemedText style={styles.cardSubtitle}>Додайте перший пристрій для початку</ThemedText>
+            <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Моніторинг якості води</ThemedText>
+            <ThemedText style={[styles.cardSubtitle, { color: colors.tabIconDefault }]}>Додайте перший пристрій для початку</ThemedText>
           </View>
         </View>
       );
@@ -564,11 +567,11 @@ export default function HomeScreen() {
     
     if (!currentDevice && userDevices.length > 0 && !isLoading) {
       return (
-        <View style={styles.infoCard}>
-          <Ionicons name="warning-outline" size={24} color={Colors.light.tabIconDefault} />
+        <View style={[styles.infoCard, { backgroundColor: colors.background, borderLeftColor: colors.tabIconDefault }]}>
+          <Ionicons name="warning-outline" size={24} color={colors.tabIconDefault} />
           <View style={styles.cardTextContainer}>
-            <ThemedText style={styles.cardTitle}>Виберіть пристрій</ThemedText>
-            <ThemedText style={styles.cardSubtitle}>Потягніть вниз щоб відкрити меню</ThemedText>
+            <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Виберіть пристрій</ThemedText>
+            <ThemedText style={[styles.cardSubtitle, { color: colors.tabIconDefault }]}>Потягніть вниз щоб відкрити меню</ThemedText>
           </View>
         </View>
       );
@@ -593,18 +596,22 @@ export default function HomeScreen() {
       label: "Наступне оновлення через",
       value: `${nextUpdateTimer} сек`,
       color: '#007AFF'
-    };
-
-    // Компактна карточка з інформацією про пристрій
+    };    // Компактна карточка з інформацією про пристрій
     return (
       <TouchableOpacity 
-        style={[styles.infoCard, { borderLeftColor: connectionStatusItem.color }]}
+        style={[
+          styles.infoCard, 
+          { 
+            borderLeftColor: connectionStatusItem.color,
+            backgroundColor: colors.background 
+          }
+        ]}
         onPress={handleInfoCardPress}
         activeOpacity={0.7}
       >
-        <Ionicons name="hardware-chip-outline" size={24} color={Colors.light.tint} />
+        <Ionicons name="hardware-chip-outline" size={24} color={colors.tint} />
         <View style={styles.cardTextContainer}>
-          <ThemedText style={styles.cardTitle}>{currentDevice.customName}</ThemedText>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>{currentDevice.customName}</ThemedText>
           <View style={styles.statusRow}>
             <View style={styles.connectionStatusItem}>
               <Ionicons 
@@ -638,18 +645,19 @@ export default function HomeScreen() {
       return null;
     }    const handleWQICardPress = () => {
       setShowWQIChart(true);
-    };
-
-    return (
+    };    return (
       <TouchableOpacity 
-        style={styles.wqiChartCard}
+        style={[styles.wqiChartCard, { 
+          backgroundColor: colors.background,
+          borderLeftColor: colors.tint 
+        }]}
         onPress={handleWQICardPress}
         activeOpacity={0.7}
       >
         <View style={styles.wqiChartCardHeader}>
-          <Ionicons name="analytics-outline" size={24} color={Colors.light.tint} />
-          <ThemedText style={styles.wqiChartCardTitle}>Індекс якості води (WQI)</ThemedText>
-          <Ionicons name="chevron-forward-outline" size={20} color={Colors.light.tabIconDefault} />
+          <Ionicons name="analytics-outline" size={24} color={colors.tint} />
+          <ThemedText style={[styles.wqiChartCardTitle, { color: colors.text }]}>Індекс якості води (WQI)</ThemedText>
+          <Ionicons name="chevron-forward-outline" size={20} color={colors.tabIconDefault} />
         </View>
         
         <View style={styles.wqiChartCardContent}>
@@ -657,11 +665,11 @@ export default function HomeScreen() {
             <ThemedText style={[styles.wqiScoreText, { color: getWaterQualityColor(score) }]}>
               {score}
             </ThemedText>
-            <ThemedText style={styles.wqiScoreLabel}>WQI</ThemedText>
+            <ThemedText style={[styles.wqiScoreLabel, { color: colors.tabIconDefault }]}>WQI</ThemedText>
           </View>
           
           <View style={styles.wqiProgressContainer}>
-            <View style={styles.wqiProgressBar}>
+            <View style={[styles.wqiProgressBar, { backgroundColor: isDarkMode ? '#3A3A3A' : '#E0E0E0' }]}>
               <View 
                 style={[
                   styles.wqiProgressFill, 
@@ -673,14 +681,14 @@ export default function HomeScreen() {
               />
             </View>
             <View style={styles.wqiLabelsContainer}>
-              <ThemedText style={styles.wqiProgressLabel}>0</ThemedText>
-              <ThemedText style={styles.wqiProgressLabel}>50</ThemedText>
-              <ThemedText style={styles.wqiProgressLabel}>100</ThemedText>
+              <ThemedText style={[styles.wqiProgressLabel, { color: colors.tabIconDefault }]}>0</ThemedText>
+              <ThemedText style={[styles.wqiProgressLabel, { color: colors.tabIconDefault }]}>50</ThemedText>
+              <ThemedText style={[styles.wqiProgressLabel, { color: colors.tabIconDefault }]}>100</ThemedText>
             </View>
           </View>
         </View>
         
-        <ThemedText style={styles.wqiChartCardSubtitle}>
+        <ThemedText style={[styles.wqiChartCardSubtitle, { color: colors.tabIconDefault }]}>
           Натисніть для перегляду детальної діаграми
         </ThemedText>
       </TouchableOpacity>
@@ -739,16 +747,49 @@ export default function HomeScreen() {
       />
     );
   }
-
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.light.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <WaveAnimation score={userDevices.length === 0 ? 50 : score} translateY={translateY} />
       
       <GestureDetector gesture={combinedGesture}>
         {/* This Animated.View needs a transparent background to see WaveAnimation behind it */}
         <Animated.View style={{ flex: 1, backgroundColor: 'transparent' }}> 
-          {/* ThemedView also needs a transparent background */}
-          <ThemedView style={[styles.container, { backgroundColor: 'transparent' }]}>
+          {/* ThemedView also needs a transparent background */}          <ThemedView style={[styles.container, { backgroundColor: 'transparent' }]}>
+            {/* Header with device info */}
+            {currentDevice && (
+              <View style={[styles.headerContainer, { backgroundColor: 'transparent' }]}>
+                <View style={styles.headerLeft}>
+                  <ThemedText style={[styles.deviceName, { color: colors.text }]}>
+                    {currentDevice.customName}
+                  </ThemedText>
+                  <ThemedText style={[styles.deviceServerName, { color: colors.tabIconDefault }]}>
+                    {currentDevice.serverConfig?.serverName || 'Невідомий сервер'}
+                  </ThemedText>
+                </View>
+                <View style={styles.headerRight}>
+                  <Ionicons 
+                    name={
+                      connectionStatus === 'connected' ? 'wifi' :
+                      connectionStatus === 'error' ? 'cloud-offline-outline' :
+                      'cloud-outline'
+                    }
+                    size={20} 
+                    color={
+                      connectionStatus === 'connected' ? colors.success :
+                      connectionStatus === 'error' ? colors.error :
+                      colors.tabIconDefault
+                    }
+                    style={styles.connectionIcon}
+                  />
+                  <View style={styles.statusTextContainer}>
+                    <ThemedText style={[styles.nextUpdateText, { color: colors.tabIconDefault }]}>
+                      {formatTime(nextUpdateTimer)}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+            )}
+            
             {/* WaveAnimation is no longer here */}
               <Animated.View style={[styles.infoCardsContainer, animatedMainScreenStyle]}>
               {renderInfoCards()}
@@ -789,11 +830,11 @@ export default function HomeScreen() {
             <Animated.View style={[styles.wqiChartCardContainer, animatedMainScreenStyle]}>
               {renderWQIChartCard()}
             </Animated.View>          {userDevices.length > 0 && currentDevice && (
-            <Animated.View style={[styles.detailedViewContainer, animatedDetailedViewStyle]}>
-              <DetailedParametersView 
+            <Animated.View style={[styles.detailedViewContainer, animatedDetailedViewStyle]}>              <DetailedParametersView 
                 parameters={detailedParams} 
                 onRefresh={updateCurrentDeviceData}
                 deviceId={currentDevice?.serverConfig?.deviceId || '111001'}
+                isDarkMode={isDarkMode}
               />
             </Animated.View>
           )}
@@ -806,46 +847,60 @@ export default function HomeScreen() {
 
           {/* Device Selection View */}
           {userDevices.length > 0 && (
-            <Animated.View style={[styles.deviceSelectionViewContainer, animatedDeviceSelectionViewStyle]}>
-              <DeviceSelectionView
+            <Animated.View style={[styles.deviceSelectionViewContainer, animatedDeviceSelectionViewStyle]}>              <DeviceSelectionView
                 devices={userDevices}
                 currentDeviceIndex={currentDeviceIndex}
                 onDeviceSelect={handleDeviceSelect}
                 onDeleteDevice={handleDeleteDevice} // Додаємо новий проп для видалення окремого пристрою
+                isDarkMode={isDarkMode}
                 // onClearDevices={handleClearDevices} // Прибираємо проп очищення списку
               />
             </Animated.View>
-          )}
-
-          {userDevices.length > 0 && (
-            <TouchableOpacity style={styles.fab} onPress={openAddDeviceModal}>
-              <Ionicons name="add" size={30} color={Colors.light.tint} />
+          )}          {userDevices.length > 0 && (
+            <TouchableOpacity style={[styles.fab, { backgroundColor: colors.background }]} onPress={openAddDeviceModal}>
+              <Ionicons name="add" size={30} color={colors.tint} />
             </TouchableOpacity>
           )}
+          
+          {/* Theme Toggle Button */}
+          <TouchableOpacity style={[styles.themeToggle, { backgroundColor: colors.background }]} onPress={toggleTheme}>
+            <Ionicons 
+              name={isDarkMode ? "sunny" : "moon"} 
+              size={24} 
+              color={colors.tint} 
+            />
+          </TouchableOpacity>
           <Modal
             animationType="slide"
             transparent={true}
             visible={isAddDeviceModalVisible}
             onRequestClose={() => setAddDeviceModalVisible(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <ThemedText type="subtitle" style={styles.modalTitle}>Додати новий пристрій</ThemedText>
+          >            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                <ThemedText type="subtitle" style={[styles.modalTitle, { color: colors.text }]}>Додати новий пристрій</ThemedText>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { 
+                    borderColor: colors.icon, 
+                    backgroundColor: colors.background,
+                    color: colors.text 
+                  }]}
                   placeholder="Назва пристрою (напр., Кухня)"
                   value={newUserDeviceName}
                   onChangeText={setNewUserDeviceName}
-                  placeholderTextColor="#aaa"
+                  placeholderTextColor={colors.tabIconDefault}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { 
+                    borderColor: colors.icon, 
+                    backgroundColor: colors.background,
+                    color: colors.text 
+                  }]}
                   placeholder="ID фізичного датчика (6 цифр)"
                   value={newPhysicalDeviceId}
                   onChangeText={setNewPhysicalDeviceId}
                   keyboardType="numeric"
                   maxLength={6}
-                  placeholderTextColor="#aaa"
+                  placeholderTextColor={colors.tabIconDefault}
                 />
                 
                 <View style={styles.modalButtonContainer}>
@@ -882,9 +937,8 @@ export default function HomeScreen() {
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-      }}>
-        <View style={{
-          backgroundColor: Colors.light.background,
+      }}>        <View style={{
+          backgroundColor: colors.background,
           borderRadius: 20,
           padding: 20,
           margin: 20,
@@ -908,14 +962,14 @@ export default function HomeScreen() {
             <ThemedText style={{
               fontSize: 18,
               fontWeight: 'bold',
-              color: Colors.light.text,
+              color: colors.text,
             }}>
               Індекс якості води (WQI)
             </ThemedText>
             <TouchableOpacity onPress={() => setShowWQIChart(false)}>
-              <Ionicons name="close" size={24} color={Colors.light.text} />
+              <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
-          </View>            <WQIChartView 
+          </View><WQIChartView 
             deviceId={currentDevice?.serverConfig?.deviceId || '111001'}
             serverEndpoint={CENTRAL_SERVER_ENDPOINT}
           />
@@ -932,17 +986,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     // backgroundColor: Colors.light.background, // Background is now on the root View
-  },
-  loadingContainer: {
+  },  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.light.background,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: Colors.light.text,
   },
   headerContainer: {
     position: 'absolute',
@@ -956,10 +1007,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', // Vertically center items in header
     zIndex: 100,
     // backgroundColor: 'rgba(255,255,255,0.1)', // Optional: for debugging layout
-  },
-  headerPlaceholderText: { // Style for placeholder text when no device
+  },  headerPlaceholderText: { // Style for placeholder text when no device
     fontSize: 18,
-    color: Colors.light.text,
     textAlign: 'center',
     width: '100%',
   },
@@ -971,18 +1020,15 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row', // Align icon and text horizontally
     alignItems: 'center', // Vertically center icon and text
-  },
-  deviceName: {
+  },  deviceName: {
     fontSize: 24, // Increased font size
     fontWeight: 'bold',
-    color: Colors.light.text,
     marginBottom: 2, // Space between device name and server name
   },
   deviceServerName: {
     fontSize: 14, // Adjusted font size
-    color: Colors.light.text,
     opacity: 0.7, // Slightly less prominent
-  },  connectionIcon: {
+  },connectionIcon: {
     marginRight: 8, // Space between icon and status text
   },
   statusTextContainer: { // New container for status texts
@@ -1026,8 +1072,7 @@ const styles = StyleSheet.create({
     width: screenWidth,
     height: screenHeight,
     backgroundColor: 'transparent',
-  },
-  fab: {
+  },  fab: {
     position: 'absolute',
     right: 30,
     bottom: 30,
@@ -1043,6 +1088,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     zIndex: 200, 
+  },
+  themeToggle: {
+    position: 'absolute',
+    left: 30,
+    bottom: 30,
+    backgroundColor: 'white',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 200,
   },
   modalOverlay: {
     flex: 1,
