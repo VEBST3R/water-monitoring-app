@@ -1,3 +1,4 @@
+import { getFromStorage, saveToStorage } from '@/utils/storageUtils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -17,7 +18,6 @@ import { UserDevice } from '@/types';
 import { getWaterQualityColor } from '@/utils/colorUtils';
 import { calculateWQI } from '@/utils/wqiUtils';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const CENTRAL_SERVER_ENDPOINT = '192.168.1.101:1880';
@@ -112,27 +112,29 @@ export default function HomeScreen() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const storedDevicesJson = await AsyncStorage.getItem(ASYNC_STORAGE_DEVICES_KEY);
-        if (storedDevicesJson) {
-          setUserDevices(JSON.parse(storedDevicesJson));
+        // Використовуємо нашу універсальну утиліту для завантаження
+        const storedDevices = await getFromStorage(ASYNC_STORAGE_DEVICES_KEY);
+        if (storedDevices) {
+          setUserDevices(storedDevices);
         } else {
           setUserDevices([]); // Initialize if nothing in storage
         }
 
-        const storedIndexJson = await AsyncStorage.getItem(ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY);
-        if (storedIndexJson) {
-          const index = JSON.parse(storedIndexJson);
+        const storedIndex = await getFromStorage(ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY);
+        if (storedIndex !== null) {
           // Ensure index is valid for the loaded devices
-          if (storedDevicesJson && JSON.parse(storedDevicesJson).length > 0) {
-            setCurrentDeviceIndex(index < JSON.parse(storedDevicesJson).length ? index : 0);
+          if (storedDevices && storedDevices.length > 0) {
+            setCurrentDeviceIndex(storedIndex < storedDevices.length ? storedIndex : 0);
           } else {
             setCurrentDeviceIndex(0);
           }
         } else {
           setCurrentDeviceIndex(0); // Initialize if nothing in storage
         }
+        
+        console.log("Завантажено пристроїв:", storedDevices ? storedDevices.length : 0);
       } catch (e) {
-        console.error("Failed to load data from AsyncStorage", e);
+        console.error("Failed to load data from storage", e);
         setUserDevices([]);
         setCurrentDeviceIndex(0);
       } finally {
@@ -142,15 +144,19 @@ export default function HomeScreen() {
     loadData();
   }, []);
 
-  // Effect to save devices and current index to AsyncStorage
+  // Effect to save devices and current index to storage
   useEffect(() => {
     const saveData = async () => {
       if (!isLoading) { // Only save if initial loading is complete
         try {
           const indexToSave = userDevices.length > 0 && currentDeviceIndex < userDevices.length ? currentDeviceIndex : 0;
-          await AsyncStorage.setItem(ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY, JSON.stringify(indexToSave));
+          // Використовуємо універсальну утиліту для збереження індексу
+          await saveToStorage(ASYNC_STORAGE_CURRENT_DEVICE_INDEX_KEY, indexToSave);
+          // Також зберігаємо пристрої щоразу, коли змінюється currentDeviceIndex
+          await saveToStorage(ASYNC_STORAGE_DEVICES_KEY, userDevices);
+          console.log("Збережено пристроїв:", userDevices.length, "Активний індекс:", indexToSave);
         } catch (e) {
-          console.error("Failed to save data to AsyncStorage", e);
+          console.error("Failed to save data to storage", e);
         }
       }
     };

@@ -1,6 +1,6 @@
 import { UserDevice } from '@/types';
+import { saveToStorage } from '@/utils/storageUtils';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -56,16 +56,31 @@ const WebDeviceManager: React.FC<WebDeviceManagerProps> = ({
       return;
     }
 
-    setIsLoading(true);
-
-    try {
+    setIsLoading(true);    try {
       // Валідація пристрою через сервер
       const validationUrl = `http://${CENTRAL_SERVER_ENDPOINT}/api/getWQI?device=${trimmedDeviceId}`;
       const response = await fetch(validationUrl);
 
       if (!response.ok) {
-        Alert.alert("Помилка", `Пристрою з ID '${trimmedDeviceId}' не знайдено на сервері. Перевірте правильність ID.`);
-        return;
+        if (response.status === 409) {
+          Alert.alert(
+            "Інформація", 
+            `Пристрій з ID '${trimmedDeviceId}' вже зареєстровано на сервері. Перевірте правильність ID або спробуйте інший.`
+          );
+          return;
+        } else if (response.status === 404) {
+          Alert.alert(
+            "Помилка", 
+            `Пристрою з ID '${trimmedDeviceId}' не знайдено на сервері. Перевірте правильність ID.`
+          );
+          return;
+        } else {
+          Alert.alert(
+            "Помилка", 
+            `Не вдалося перевірити пристрій з ID '${trimmedDeviceId}'. Помилка сервера: ${response.status}`
+          );
+          return;
+        }
       }
 
       // Створюємо новий пристрій
@@ -79,12 +94,14 @@ const WebDeviceManager: React.FC<WebDeviceManagerProps> = ({
         location: 'Не вказано',
         isOnline: true,
         lastUpdate: new Date().toISOString(),
-      };
-
-      const updatedDevices = [...userDevices, newDevice];
+      };      const updatedDevices = [...userDevices, newDevice];
       
-      // Зберігаємо в AsyncStorage
-      await AsyncStorage.setItem(ASYNC_STORAGE_DEVICES_KEY, JSON.stringify(updatedDevices));
+      // Зберігаємо, використовуючи крос-платформне рішення
+      const saveResult = await saveToStorage(ASYNC_STORAGE_DEVICES_KEY, updatedDevices);
+      
+      if (!saveResult) {
+        console.warn("Не вдалося зберегти дані про пристрої");
+      }
       
       // Оновлюємо стан
       onDevicesUpdate(updatedDevices);
@@ -115,11 +132,14 @@ const WebDeviceManager: React.FC<WebDeviceManagerProps> = ({
           text: "Видалити", 
           style: "destructive",
           onPress: async () => {
-            try {
-              const updatedDevices = userDevices.filter(device => device.id !== deviceId);
+            try {              const updatedDevices = userDevices.filter(device => device.id !== deviceId);
               
-              // Зберігаємо в AsyncStorage
-              await AsyncStorage.setItem(ASYNC_STORAGE_DEVICES_KEY, JSON.stringify(updatedDevices));
+              // Зберігаємо, використовуючи крос-платформне рішення
+              const saveResult = await saveToStorage(ASYNC_STORAGE_DEVICES_KEY, updatedDevices);
+              
+              if (!saveResult) {
+                console.warn("Не вдалося зберегти дані про пристрої");
+              }
               
               // Оновлюємо стан
               onDevicesUpdate(updatedDevices);

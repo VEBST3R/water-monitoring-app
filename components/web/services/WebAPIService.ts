@@ -153,11 +153,10 @@ class WebAPIService {
       console.error('Failed to fetch supported parameters:', error);
       throw error;
     }
-  }
-  /**
+  }  /**
    * Калібрування датчиків
    */
-  async calibrateSensors(deviceId: string): Promise<{ success: boolean; message: string }> {
+  async calibrateSensors(deviceId: string): Promise<{ success: boolean; message: string; errorCode?: string; nextCalibrationDate?: string }> {
     try {
       const response = await fetch(`${NODE_RED_BASE_URL}/calibrateSensors?device=${deviceId}`, {
         method: 'POST',
@@ -167,17 +166,69 @@ class WebAPIService {
       });
       
       if (!response.ok) {
+        // Обробка помилок HTTP
+        if (response.status === 409) {
+          return {
+            success: false,
+            message: 'Калібрування вже було проведено для цього пристрою недавно',
+            errorCode: 'ALREADY_CALIBRATED'
+          };
+        } else if (response.status === 404) {
+          return {
+            success: false,
+            message: 'Пристрій з таким ID не знайдено',
+            errorCode: 'DEVICE_NOT_FOUND'
+          };
+        } else if (response.status === 400) {
+          return {
+            success: false,
+            message: 'Некоректний ID пристрою або параметри запиту',
+            errorCode: 'INVALID_PARAMS'
+          };
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
+      
+      // Обробка бізнес-помилок від сервера
+      if (!data.success) {
+        if (data.errorCode === 'ALREADY_CALIBRATED') {
+          return {
+            success: false,
+            message: data.message || 'Калібрування вже було проведено для цього пристрою недавно',
+            errorCode: 'ALREADY_CALIBRATED',
+            nextCalibrationDate: data.nextCalibrationDate
+          };
+        } else if (data.errorCode === 'MAINTENANCE_MODE') {
+          return {
+            success: false,
+            message: data.message || 'Пристрій у режимі обслуговування',
+            errorCode: 'MAINTENANCE_MODE'
+          };
+        } else if (data.errorCode === 'SENSORS_ERROR') {
+          return {
+            success: false,
+            message: data.message || 'Помилка датчиків під час калібрування',
+            errorCode: 'SENSORS_ERROR'
+          };
+        }
+      }
+      
       return {
         success: data.success,
-        message: data.message
+        message: data.message,
+        nextCalibrationDate: data.nextCalibrationDate
       };
     } catch (error) {
       console.error('Failed to calibrate sensors:', error);
-      throw error;
+      return {
+        success: false,
+        message: error instanceof Error 
+          ? `Помилка під час калібрування датчиків: ${error.message}` 
+          : 'Невідома помилка під час калібрування датчиків',
+        errorCode: 'UNKNOWN_ERROR'
+      };
     }
   }
 

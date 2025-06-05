@@ -1,6 +1,6 @@
 import { UserDevice } from '@/types';
 import { getWaterQualityColor } from '@/utils/colorUtils';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFromStorage, saveToStorage } from '@/utils/storageUtils';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Platform, ScrollView, Text, TextStyle, TouchableOpacity, View, ViewStyle } from 'react-native';
 import DeviceStatusView from '../DeviceStatusView';
@@ -75,17 +75,16 @@ const WebDashboard: React.FC<WebDashboardProps> = ({
 
     return () => clearInterval(timer);
   }, [updateCurrentDeviceData, deviceId, userDevices.length]);
-
   const loadThemePreference = async () => {
     try {
-      const savedTheme = await AsyncStorage.getItem('@theme');
+      const savedTheme = await getFromStorage('@theme');
       if (savedTheme !== null) {
         setIsDarkMode(savedTheme === 'dark');
       }
     } catch (error) {
       console.error('Error loading theme preference:', error);
     }
-  };  const loadRealTimeData = async () => {
+  };const loadRealTimeData = async () => {
     // Не завантажуємо дані, якщо немає пристроїв
     if (userDevices.length === 0) {
       setRealTimeData(null);
@@ -104,12 +103,11 @@ const WebDashboard: React.FC<WebDashboardProps> = ({
       setIsRealTimeLoading(false);
     }
   };
-
   const toggleTheme = async () => {
     const newTheme = !isDarkMode;
     setIsDarkMode(newTheme);
     try {
-      await AsyncStorage.setItem('@theme', newTheme ? 'dark' : 'light');
+      await saveToStorage('@theme', newTheme ? 'dark' : 'light');
     } catch (error) {
       console.error('Error saving theme preference:', error);
     }
@@ -199,11 +197,11 @@ const WebDashboard: React.FC<WebDashboardProps> = ({
             currentParams={displayData.parameters}
             wqiValue={displayData.wqi} // Pass WQI score
           />
-        );
-        case 'deviceStatus':
+        );        case 'deviceStatus':
         return (
           <DeviceStatusView
             device={currentDevice}
+            isDarkMode={isDarkMode}
           />
         );
       

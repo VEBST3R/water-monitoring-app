@@ -62,7 +62,8 @@ export interface DeviceStatusResponse {
 export interface CalibrationResponse {
   success: boolean;
   message: string;
-  nextCalibrationDate: string;
+  nextCalibrationDate?: string;
+  errorCode?: string;
 }
 
 export interface AvailableSensorsResponse {

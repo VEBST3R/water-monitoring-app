@@ -37,31 +37,66 @@ export const useDeviceStatus = (deviceId: string) => {
     } finally {
       setLoading(false);
     }
-  }, [deviceId]);
-  const calibrateSensors = useCallback(async (): Promise<CalibrationResponse> => {
+  }, [deviceId]);  const calibrateSensors = useCallback(async (): Promise<CalibrationResponse> => {
+    console.log('🔧 calibrateSensors called for device:', deviceId);
     try {
-      const response = await fetch(`${API_BASE_URL}/calibrateSensors?device=${deviceId}`, {
+      const url = `${API_BASE_URL}/calibrateSensors?device=${deviceId}`;
+      console.log('📡 Making request to:', url);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
       });
 
+      console.log('📡 Response status:', response.status);
+      console.log('📡 Response ok:', response.ok);
+
+      // Обробка помилок HTTP
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+        if (response.status === 409) {
+          const errorData = await response.json();
+          return {
+            success: false,
+            message: errorData.message || 'Калібрування вже було проведено для цього пристрою недавно',
+            errorCode: 'ALREADY_CALIBRATED',
+            nextCalibrationDate: errorData.nextCalibrationDate
+          };
+        } else if (response.status === 404) {
+          return {
+            success: false,
+            message: 'Пристрій з таким ID не знайдено',
+            errorCode: 'DEVICE_NOT_FOUND'
+          };
+        } else if (response.status === 400) {
+          return {
+            success: false,
+            message: 'Некоректний ID пристрою або параметри запиту',
+            errorCode: 'INVALID_PARAMS'
+          };
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);      }
 
       const result: CalibrationResponse = await response.json();
+      console.log('📋 Parsed calibration result:', result);
       
       // Refresh device status after calibration
       if (result.success) {
+        console.log('✅ Calibration successful, refreshing device status...');
         await fetchDeviceStatus();
       }
       
       return result;
     } catch (err) {
       console.error('Error calibrating sensors:', err);
-      throw err;
+      return {
+        success: false,
+        message: err instanceof Error 
+          ? `Помилка під час калібрування датчиків: ${err.message}` 
+          : 'Невідома помилка під час калібрування датчиків',
+        errorCode: 'UNKNOWN_ERROR'
+      };
     }
   }, [deviceId, fetchDeviceStatus]);
 

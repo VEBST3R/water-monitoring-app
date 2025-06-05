@@ -5,15 +5,15 @@ import { UserDevice } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 interface DeviceStatusViewProps {
@@ -209,186 +209,15 @@ const DeviceStatusView: React.FC<DeviceStatusViewProps> = ({ device, isDarkMode 
             <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Розташування:</ThemedText>
             <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>{currentDevice?.location || 'Не вказано'}</ThemedText>
           </View>
-            <View style={styles.infoSection}>
+          
+          <View style={styles.infoSection}>
             <Ionicons name="wifi-outline" size={20} color={currentDevice?.isOnline ? '#4CAF50' : '#F44336'} style={styles.icon} />
             <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Статус:</ThemedText>
             <ThemedText style={[styles.value, {color: currentDevice?.isOnline ? '#4CAF50' : '#F44336'}]}>
               {currentDevice?.isOnline ? 'Онлайн' : 'Офлайн'}
             </ThemedText>
           </View>
-          
-          <View style={styles.infoSection}>
-            <Ionicons name="time-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Останнє оновлення:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {currentDevice?.lastUpdate ? new Date(currentDevice.lastUpdate).toLocaleString('uk-UA') : 'Невідомо'}
-            </ThemedText>
-          </View>
         </View>
-
-        {/* Технічна інформація */}
-        <View style={[styles.infoCard, isDarkMode && { backgroundColor: '#1f2937' }]}>
-          <View style={[styles.cardHeader, isDarkMode && { borderBottomColor: Colors.dark.tabIconDefault }]}>
-            <Ionicons name="cog-outline" size={24} color={isDarkMode ? Colors.dark.tint : Colors.light.tint} />
-            <ThemedText type="subtitle" style={[styles.cardTitle, isDarkMode && { color: Colors.dark.text }]}>Технічна інформація</ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="battery-full-outline" size={20} color={technical?.batteryLevel ? 
-              (technical.batteryLevel > 50 ? '#4CAF50' : technical.batteryLevel > 20 ? '#FF9800' : '#F44336') : 
-              (isDarkMode ? Colors.dark.text : Colors.light.text)
-            } style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Рівень батареї:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.batteryLevel ? `${technical.batteryLevel}%` : 'Невідомо'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="flash-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Джерело живлення:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.powerSource || 'Невідомо'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="timer-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Час роботи:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.operatingTime || 'Невідомо'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="speedometer-outline" size={20} color={technical?.ping ? 
-              (technical.ping < 100 ? '#4CAF50' : technical.ping < 300 ? '#FF9800' : '#F44336') : 
-              (isDarkMode ? Colors.dark.text : Colors.light.text)
-            } style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Затримка (ping):</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.ping ? `${technical.ping} мс` : 'Невідомо'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="code-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Версія прошивки:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.firmwareVersion || 'Невідомо'}
-            </ThemedText>
-          </View>
-        </View>
-
-        {/* Статус датчиків */}
-        <View style={[styles.infoCard, isDarkMode && { backgroundColor: '#1f2937' }]}>
-          <View style={[styles.cardHeader, isDarkMode && { borderBottomColor: Colors.dark.tabIconDefault }]}>
-            <Ionicons name="radio-outline" size={24} color={isDarkMode ? Colors.dark.tint : Colors.light.tint} />
-            <ThemedText type="subtitle" style={[styles.cardTitle, isDarkMode && { color: Colors.dark.text }]}>Статус датчиків</ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="construct-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Стан датчиків:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.sensorStatus || 'Невідомо'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="calendar-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Останнє калібрування:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.lastCalibration ? new Date(technical.lastCalibration).toLocaleString('uk-UA') : 'Невідомо'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.infoSection}>
-            <Ionicons name="link-outline" size={20} color={isDarkMode ? Colors.dark.text : Colors.light.text} style={styles.icon} />
-            <ThemedText type="defaultSemiBold" style={[styles.label, isDarkMode && { color: Colors.dark.text }]}>Статус з'єднання:</ThemedText>
-            <ThemedText style={[styles.value, isDarkMode && { color: Colors.dark.icon }]}>
-              {technical?.connectionStatus || 'Невідомо'}
-            </ThemedText>
-          </View>
-        </View>        {/* Сповіщення та попередження */}
-        {technical?.alerts && technical.alerts.length > 0 && (
-          <View style={[styles.infoCard, isDarkMode && { backgroundColor: '#1f2937' }]}>
-            <View style={[styles.cardHeader, isDarkMode && { borderBottomColor: Colors.dark.tabIconDefault }]}>
-              <Ionicons name="notifications-outline" size={24} color={isDarkMode ? Colors.dark.tint : Colors.light.tint} />
-              <ThemedText type="subtitle" style={[styles.cardTitle, isDarkMode && { color: Colors.dark.text }]}>
-                Сповіщення ({technical.alerts.length})
-              </ThemedText>
-            </View>
-
-            <ScrollView 
-              style={styles.alertsScrollView}
-              showsVerticalScrollIndicator={true}
-              nestedScrollEnabled={true}
-              contentContainerStyle={styles.alertsScrollContent}
-            >
-              {technical.alerts
-                .map((alert, originalIndex) => {
-                  const alertData = typeof alert === 'string' ? { 
-                    message: alert, 
-                    severity: 'info',
-                    timestamp: Date.now() - (originalIndex * 3600000) // Час за замовчуванням
-                  } : alert;
-                  return { ...alertData, originalIndex };
-                })
-                .sort((a, b) => {
-                  // Спочатку сортуємо за пріоритетом (помилки > попередження > інформація)
-                  const severityOrder = { 'error': 3, 'warning': 2, 'info': 1 };
-                  const aSeverity = severityOrder[a.severity as keyof typeof severityOrder] || 1;
-                  const bSeverity = severityOrder[b.severity as keyof typeof severityOrder] || 1;
-                  
-                  if (aSeverity !== bSeverity) {
-                    return bSeverity - aSeverity; // Зворотний порядок (більший пріоритет спочатку)
-                  }
-                  
-                  // Потім за часом (новіші спочатку)
-                  const aTime = a.timestamp || 0;
-                  const bTime = b.timestamp || 0;
-                  return bTime - aTime;
-                })
-                .map((alertData, index) => {
-                  const alertColor = alertData.severity === 'error' ? '#F44336' : 
-                                    alertData.severity === 'warning' ? '#FF9800' : '#2196F3';
-                  const alertIcon = alertData.severity === 'error' ? 'alert-circle-outline' : 
-                                  alertData.severity === 'warning' ? 'warning-outline' : 'information-circle-outline';
-                  const alertBgColor = alertData.severity === 'error' ? 'rgba(244, 67, 54, 0.1)' :
-                                     alertData.severity === 'warning' ? 'rgba(255, 152, 0, 0.1)' : 'rgba(33, 150, 243, 0.1)';
-                  const alertBorderColor = alertData.severity === 'error' ? '#F44336' :
-                                         alertData.severity === 'warning' ? '#FF9800' : '#2196F3';
-                  
-                  return (
-                    <View key={`alert-${alertData.originalIndex}-${index}`} style={[
-                      styles.alertSection,
-                      { 
-                        backgroundColor: alertBgColor,
-                        borderLeftColor: alertBorderColor
-                      }
-                    ]}>
-                      <View style={styles.alertHeader}>
-                        <Ionicons name={alertIcon} size={20} color={alertColor} style={styles.alertIcon} />
-                        <ThemedText style={[styles.alertSeverity, { color: alertColor }]}>
-                          {alertData.severity === 'error' ? 'ПОМИЛКА' : 
-                           alertData.severity === 'warning' ? 'ПОПЕРЕДЖЕННЯ' : 'ІНФОРМАЦІЯ'}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={[styles.alertText, isDarkMode && { color: Colors.dark.text }]}>
-                        {alertData.message}
-                      </ThemedText>
-                      {alertData.timestamp && (
-                        <ThemedText style={[styles.alertTime, isDarkMode && { color: Colors.dark.tabIconDefault }]}>
-                          {new Date(alertData.timestamp).toLocaleString('uk-UA')}
-                        </ThemedText>
-                      )}
-                    </View>
-                  );
-                })}
-            </ScrollView>
-          </View>
-        )}
 
         {/* Кнопка калібрування */}
         <View style={styles.buttonContainer}>
@@ -650,58 +479,10 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: '#666',
     fontWeight: '600',
-  },  confirmButtonText: {
+  },
+  confirmButtonText: {
     color: 'white',
     fontWeight: '600',
-  },  alertSection: {
-    marginBottom: 12,
-    padding: 12,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
-  },
-  alertHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  alertIcon: {
-    marginRight: 8,
-  },
-  alertSeverity: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  alertText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginLeft: 28,
-    flex: 1,
-  },
-  alertTime: {
-    fontSize: 12,
-    marginLeft: 28,
-    marginTop: 4,
-    opacity: 0.7,
-  },
-  moreAlertsContainer: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
-    alignItems: 'center',
-  },  moreAlertsText: {
-    fontSize: 13,
-    fontStyle: 'italic',
-    opacity: 0.8,
-  },
-  alertsScrollView: {
-    maxHeight: 300, // Обмежуємо висоту ScrollView
-  },
-  alertsScrollContent: {
-    paddingBottom: 8,
   },
 });
 
